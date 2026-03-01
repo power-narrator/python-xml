@@ -35,8 +35,8 @@ from .xml_helper import ensure_child, ensure_content_type_override
 from .xpath import (
     XPATH_NOTES_BODY_SHAPES,
     XPATH_NOTES_MASTER_ID_WITH_RID,
-    XPATH_PARAGRAPH_TEXT,
     XPATH_P_CNVPR_WITH_ID,
+    XPATH_PARAGRAPH_TEXT,
     XPATH_SHAPE_PARAGRAPHS,
     XPATH_TXBODY_PARAGRAPHS,
 )
