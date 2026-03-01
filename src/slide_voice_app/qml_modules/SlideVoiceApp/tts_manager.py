@@ -99,7 +99,7 @@ class TTSManager(QObject):
         )
         temp_dir = Path(temp_location) / "slide-voice-app"
         temp_dir.mkdir(parents=True, exist_ok=True)
-        return str(temp_dir / "output.mp3")
+        return str(temp_dir / "slide-voice-app.mp3")
 
     @Property(str, constant=True)
     def outputFile(self) -> str:
