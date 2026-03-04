@@ -2,10 +2,6 @@
 
 XPATH_RELATIONSHIP_WITH_ID = "r:Relationship[@Id]"
 XPATH_RELATIONSHIP_BY_ID = "r:Relationship[@Id='{rid}']"
-XPATH_RELATIONSHIP_BY_TYPE = "r:Relationship[@Type='{rel_type}']"
-XPATH_RELATIONSHIP_BY_TYPE_AND_TARGET = (
-    "r:Relationship[@Type='{rel_type}'][@Target='{target}']"
-)
 
 XPATH_CT_DEFAULT_BY_EXTENSION = "ct:Default[@Extension='{extension}']"
 XPATH_CT_OVERRIDE_BY_PATH_NAME = "ct:Override[@PartName='{path_name}']"

@@ -7,20 +7,43 @@ from zipfile import ZipFile
 from .exceptions import RelsNotFoundError
 from .namespaces import NAMESPACE_RELS, NSMAP_RELS
 from .xpath import (
-    XPATH_RELATIONSHIP_BY_TYPE,
-    XPATH_RELATIONSHIP_BY_TYPE_AND_TARGET,
     XPATH_RELATIONSHIP_WITH_ID,
 )
 
 
-def _find_relationships_by_type(
-    rels_element: ET.Element, rel_type: str
-) -> list[ET.Element]:
-    """Return relationship elements matching the given type."""
-    return rels_element.findall(
-        XPATH_RELATIONSHIP_BY_TYPE.format(rel_type=rel_type),
-        namespaces=NSMAP_RELS,
-    )
+def get_relationship_id_target_map(
+    rels_element: ET.Element,
+    rel_type: str | None = None,
+    only_ids: set[str] | None = None,
+) -> dict[str, str]:
+    """Build a relationship ID -> target map with optional filters.
+
+    Args:
+        rels_element: Parsed .rels XML element.
+        rel_type: Optional relationship type URI filter.
+        only_ids: Optional set of relationship IDs to include.
+
+    Returns:
+        Mapping of relationship ID to target path.
+    """
+    relationship_map: dict[str, str] = {}
+
+    for rel in rels_element.findall(XPATH_RELATIONSHIP_WITH_ID, namespaces=NSMAP_RELS):
+        rid = rel.get("Id")
+        target = rel.get("Target")
+
+        if rid is None or target is None:
+            continue
+
+        if rel_type is not None and rel.get("Type") != rel_type:
+            continue
+
+        if only_ids is not None and rid not in only_ids:
+            continue
+
+        relationship_map[rid] = target
+
+    return relationship_map
 
 
 def read_rels(zip_file: ZipFile, rels_path: str) -> ET.Element:
@@ -75,11 +98,28 @@ def get_relationships_target_by_type(
     Returns:
         List of matching relationship with targets.
     """
-    return [
-        target
-        for rel in _find_relationships_by_type(rels_element, rel_type)
-        if (target := rel.get("Target"))
-    ]
+    return list(
+        get_relationship_id_target_map(rels_element, rel_type=rel_type).values()
+    )
+
+
+def find_relationship_target_by_type(
+    rels_element: ET.Element,
+    rel_type: str,
+) -> str | None:
+    """Find any relationship target by type, return target or None.
+
+    Args:
+        rels_element: Parsed .rels XML element.
+        rel_type: Relationship type URI.
+
+    Returns:
+        A matching target path if found, None otherwise.
+    """
+    return next(
+        iter(get_relationship_id_target_map(rels_element, rel_type=rel_type).values()),
+        None,
+    )
 
 
 def find_relationship_by_type_and_target(
@@ -97,16 +137,12 @@ def find_relationship_by_type_and_target(
     Returns:
         Relationship ID (rId) if found, None otherwise.
     """
-    rel = rels_element.find(
-        XPATH_RELATIONSHIP_BY_TYPE_AND_TARGET.format(
-            rel_type=rel_type,
-            target=target,
-        ),
-        namespaces=NSMAP_RELS,
-    )
-
-    if rel is not None:
-        return rel.get("Id")
+    for rid, rel_target in get_relationship_id_target_map(
+        rels_element,
+        rel_type=rel_type,
+    ).items():
+        if rel_target == target:
+            return rid
 
     return None
 
