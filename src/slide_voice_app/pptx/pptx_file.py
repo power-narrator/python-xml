@@ -200,10 +200,12 @@ class Slide:
         Args:
             audio_id: In-memory audio identifier.
         """
-        if audio_id not in self._audio_by_id:
+        audio = self._audio_by_id.get(audio_id)
+
+        if audio is None:
             return
 
-        delete_slide_audio(self._work_dir, self.slide_path, self._audio_by_id[audio_id])
+        delete_slide_audio(self._work_dir, self.slide_path, audio)
         self._reload_audio()
 
 
