@@ -62,9 +62,7 @@ def load_slide_audio(work_dir: Path, slide_path: str) -> list[Audio]:
         )
         blip = pic.find(XPATH_PIC_BLIP, namespaces=NSMAP)
 
-        audio_rid = (
-            audio_file.get(f"{{{NAMESPACE_R}}}link") if audio_file is not None else None
-        )
+        audio_rid = audio_file.get(f"{{{NAMESPACE_R}}}link")
         media_rid = (
             media_el.get(f"{{{NAMESPACE_R}}}embed") if media_el is not None else None
         )
