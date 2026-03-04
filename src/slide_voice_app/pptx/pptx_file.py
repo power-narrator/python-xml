@@ -23,7 +23,11 @@ from .namespaces import (
 )
 from .notes import extract_notes_text, write_slide_notes
 from .paths import rels_path_for_path, resolve_target_path, slide_rels_path
-from .rels import get_relationships_target_by_type, read_rels_path
+from .rels import (
+    find_relationship_target_by_type,
+    get_relationships_target_by_type,
+    read_rels_path,
+)
 
 
 def _update_core_xml_modified(core_content: bytes) -> bytes:
@@ -93,7 +97,10 @@ def _count_slides_with_notes(work_dir: Path) -> int:
     for rels_path in rels_dir.glob("slide*.xml.rels"):
         rels_root = ET.fromstring(rels_path.read_bytes())
 
-        if get_relationships_target_by_type(rels_root, REL_TYPE_NOTES_SLIDE):
+        if (
+            find_relationship_target_by_type(rels_root, REL_TYPE_NOTES_SLIDE)
+            is not None
+        ):
             count += 1
 
     return count
@@ -159,14 +166,14 @@ class Slide:
         rels_path = slide_rels_path(self._work_dir, self.slide_path)
         slide_rels = read_rels_path(rels_path)
 
-        if not (
-            notes_targets := get_relationships_target_by_type(
-                slide_rels, REL_TYPE_NOTES_SLIDE
+        if (
+            notes_target := find_relationship_target_by_type(
+                slide_rels,
+                REL_TYPE_NOTES_SLIDE,
             )
-        ):
+        ) is None:
             return ""
 
-        notes_target = notes_targets[0]
         notes_xml_path = resolve_target_path(self.slide_path, notes_target)
         notes_path = self._work_dir / notes_xml_path
 

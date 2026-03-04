@@ -27,8 +27,8 @@ from .paths import (
 )
 from .rels import (
     add_relationship,
-    find_relationship_by_type_and_target,
-    get_relationships_target_by_type,
+    get_relationship_id_target_map,
+    find_relationship_target_by_type,
     read_rels_path,
 )
 from .xml_helper import ensure_child, ensure_content_type_override
@@ -311,8 +311,9 @@ def _find_theme_path_for_notes_master_rels(
     Returns:
         Normalized theme path if found; otherwise `None`.
     """
-    for theme_target in get_relationships_target_by_type(
-        notes_master_rels, REL_TYPE_THEME
+    if theme_target := find_relationship_target_by_type(
+        notes_master_rels,
+        REL_TYPE_THEME,
     ):
         return resolve_target_path(notes_master_path, theme_target)
 
@@ -411,28 +412,17 @@ def _ensure_notes_master(work_dir: Path) -> str:
     presentation_root = ET.fromstring(presentation_path.read_bytes())
     presentation_rels_path = work_dir / "ppt/_rels/presentation.xml.rels"
     presentation_rels = read_rels_path(presentation_rels_path)
-    notes_master_targets = get_relationships_target_by_type(
-        presentation_rels, REL_TYPE_NOTES_MASTER
+    notes_master_rels = get_relationship_id_target_map(
+        presentation_rels,
+        rel_type=REL_TYPE_NOTES_MASTER,
     )
-    notes_master_rels = {
-        rid: target
-        for target in notes_master_targets
-        if (
-            rid := find_relationship_by_type_and_target(
-                presentation_rels, REL_TYPE_NOTES_MASTER, target
-            )
-        )
-        is not None
-    }
 
     notes_master_id = presentation_root.find(
         XPATH_NOTES_MASTER_ID_WITH_RID, namespaces=NSMAP
     )
 
     if notes_master_id is not None:
-        notes_master_rid = notes_master_id.get(f"{{{NAMESPACE_R}}}id")
-        # Xpath only finds elements with r:id attribute
-        assert notes_master_rid
+        notes_master_rid = notes_master_id.get(f"{{{NAMESPACE_R}}}id", "")
         notes_master_target = notes_master_rels.get(notes_master_rid)
 
         if notes_master_target is None:
@@ -501,10 +491,10 @@ def write_slide_notes(work_dir: Path, slide_path: str, text: str) -> None:
     rels_path = slide_rels_path(work_dir, slide_path)
     slide_rels = read_rels_path(rels_path)
 
-    notes_targets = get_relationships_target_by_type(slide_rels, REL_TYPE_NOTES_SLIDE)
-
-    if notes_targets:
-        notes_xml_path = resolve_target_path(slide_path, notes_targets[0])
+    if notes_target := find_relationship_target_by_type(
+        slide_rels, REL_TYPE_NOTES_SLIDE
+    ):
+        notes_xml_path = resolve_target_path(slide_path, notes_target)
         notes_path = work_dir / notes_xml_path
 
         if not notes_path.exists():

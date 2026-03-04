@@ -5,15 +5,15 @@ from pathlib import Path
 
 from .audio_model import Audio
 from .exceptions import SlideXmlNotFoundError
-from .namespaces import NAMESPACE_R, NSMAP, NSMAP_RELS
+from .namespaces import NAMESPACE_R, NSMAP
 from .paths import slide_rels_path
+from .rels import get_relationship_id_target_map
 from .xpath import (
     XPATH_P_PIC,
     XPATH_PIC_AUDIO_FILE,
     XPATH_PIC_BLIP,
     XPATH_PIC_CNVPR,
     XPATH_PIC_MEDIA,
-    XPATH_RELATIONSHIP_WITH_ID,
 )
 
 
@@ -93,13 +93,10 @@ def load_slide_audio(work_dir: Path, slide_path: str) -> list[Audio]:
 
     if needed_rids and rels_file.exists():
         rels_root = ET.fromstring(rels_file.read_bytes())
-
-        for rel in rels_root.findall(XPATH_RELATIONSHIP_WITH_ID, namespaces=NSMAP_RELS):
-            rid = rel.get("Id")
-            target = rel.get("Target")
-
-            if rid and target and rid in needed_rids:
-                rels_targets[rid] = target
+        rels_targets = get_relationship_id_target_map(
+            rels_root,
+            only_ids=needed_rids,
+        )
 
     for audio_id, name, spid, audio_rid, media_rid, image_rid in entry_parts:
         target = rels_targets.get(audio_rid)
