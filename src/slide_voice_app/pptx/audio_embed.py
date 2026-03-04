@@ -17,6 +17,7 @@ from .audio_timing import (
     get_or_create_command_parent,
     get_or_create_pic_parent,
 )
+from .exceptions import SlideXmlNotFoundError
 from .namespaces import (
     NAMESPACE_A,
     NAMESPACE_A16,
@@ -223,7 +224,8 @@ def add_audio_to_slide(
         mp3_path: Path to the MP3 audio file to insert.
 
     Raises:
-        FileNotFoundError: If input files do not exist.
+        FileNotFoundError: If workspace directory or MP3 file does not exist.
+        SlideXmlNotFoundError: If the slide XML file does not exist.
     """
     if not work_path.exists() or not work_path.is_dir():
         raise FileNotFoundError(f"Workspace not found: {work_path}")
@@ -243,7 +245,7 @@ def add_audio_to_slide(
     slide_file_path = work_path / slide_path
 
     if not slide_file_path.exists():
-        raise FileNotFoundError(f"Slide not found in workspace: {slide_path}")
+        raise SlideXmlNotFoundError(slide_path)
 
     media_dir = work_path / "ppt/media"
     media_dir.mkdir(parents=True, exist_ok=True)

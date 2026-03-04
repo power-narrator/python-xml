@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from .audio_model import Audio
+from .exceptions import SlideXmlNotFoundError
 from .namespaces import NAMESPACE_R, NSMAP, NSMAP_RELS
 from .paths import slide_rels_path
 from .xpath import (
@@ -25,11 +26,14 @@ def load_slide_audio(work_dir: Path, slide_path: str) -> list[Audio]:
 
     Returns:
         List of discovered audio entries.
+
+    Raises:
+        SlideXmlNotFoundError: If the slide XML file does not exist.
     """
     slide_file = work_dir / slide_path
 
     if not slide_file.exists():
-        return []
+        raise SlideXmlNotFoundError(slide_path)
 
     slide_root = ET.fromstring(slide_file.read_bytes())
     audio_entries: list[Audio] = []

@@ -7,6 +7,15 @@ class PptxError(Exception):
     pass
 
 
+class InvalidPptxError(PptxError):
+    """Raised when the PPTX file is malformed or invalid."""
+
+    def __init__(self, path: str, reason: str) -> None:
+        self.path = path
+        self.reason = reason
+        super().__init__(f"Invalid PPTX file '{path}': {reason}")
+
+
 class SlideNotFoundError(PptxError):
     """Raised when a requested slide does not exist."""
 
@@ -19,21 +28,20 @@ class SlideNotFoundError(PptxError):
         )
 
 
-class NotesNotFoundError(PptxError):
-    """Raised when slide notes are requested but do not exist."""
+class SlideXmlNotFoundError(PptxError):
+    """Raised when a slide XML path cannot be found in workspace."""
 
-    def __init__(self, slide_index: int) -> None:
-        self.slide_index = slide_index
-        super().__init__(f"Slide notes not found for slide {slide_index}.")
+    def __init__(self, slide_path: str) -> None:
+        self.slide_path = slide_path
+        super().__init__(f"Slide XML not found in workspace: '{slide_path}'")
 
 
-class InvalidPptxError(PptxError):
-    """Raised when the PPTX file is malformed or invalid."""
+class RelsNotFoundError(PptxError):
+    """Raised when a .rels file does not exist in the PPTX archive."""
 
-    def __init__(self, path: str, reason: str) -> None:
-        self.path = path
-        self.reason = reason
-        super().__init__(f"Invalid PPTX file '{path}': {reason}")
+    def __init__(self, rels_path: str) -> None:
+        self.rels_path = rels_path
+        super().__init__(f"Relationships file not found in PPTX: '{rels_path}'")
 
 
 class RelationshipIdNotFoundError(PptxError):
@@ -57,11 +65,3 @@ class RelationshipTargetNotFoundError(PptxError):
             "Relationship target "
             f"'{target}' not found from relationships source '{source}'."
         )
-
-
-class RelsNotFoundError(PptxError):
-    """Raised when a .rels file does not exist in the PPTX archive."""
-
-    def __init__(self, rels_path: str) -> None:
-        self.rels_path = rels_path
-        super().__init__(f"Relationships file not found in PPTX: '{rels_path}'")

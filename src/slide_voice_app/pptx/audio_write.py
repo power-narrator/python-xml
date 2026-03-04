@@ -6,14 +6,15 @@ from pathlib import Path
 from .audio_embed import add_audio_to_slide
 from .audio_model import Audio
 from .audio_read import load_slide_audio
+from .exceptions import SlideXmlNotFoundError
 from .namespaces import NSMAP, NSMAP_RELS
 from .paths import resolve_target_path, slide_rels_path
 from .xpath import (
     XPATH_P_AUDIO,
     XPATH_P_PAR,
     XPATH_P_PIC,
-    XPATH_PIC_CNVPR,
     XPATH_P_SPTGT_BY_SPID,
+    XPATH_PIC_CNVPR,
     XPATH_RELATIONSHIP_BY_ID,
 )
 
@@ -47,6 +48,7 @@ def upsert_slide_audio(work_dir: Path, slide_path: str, mp3_path: Path) -> None:
 
     Raises:
         FileNotFoundError: If source file does not exist.
+        SlideXmlNotFoundError: If the slide XML file does not exist.
     """
     if not mp3_path.exists():
         raise FileNotFoundError(f"MP3 file not found: {mp3_path}")
@@ -77,16 +79,15 @@ def delete_slide_audio(work_dir: Path, slide_path: str, audio: Audio) -> None:
         work_dir: Extracted PPTX workspace root.
         slide_path: Slide OOXML path.
         audio: Audio entry to remove.
+
+    Raises:
+        SlideXmlNotFoundError: If the slide XML file does not exist.
     """
-    if audio.spid < 0:
-        return
-
     spid = audio.spid
-
     slide_file = work_dir / slide_path
 
     if not slide_file.exists():
-        return
+        raise SlideXmlNotFoundError(slide_path)
 
     slide_root = ET.fromstring(slide_file.read_bytes())
     parent_map = {child: parent for parent in slide_root.iter() for child in parent}

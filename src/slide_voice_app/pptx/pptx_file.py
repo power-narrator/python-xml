@@ -12,7 +12,7 @@ from .audio_read import load_slide_audio
 from .audio_write import delete_slide_audio, upsert_slide_audio
 from .exceptions import (
     InvalidPptxError,
-    NotesNotFoundError,
+    RelationshipTargetNotFoundError,
     SlideNotFoundError,
 )
 from .namespaces import (
@@ -22,7 +22,7 @@ from .namespaces import (
     REL_TYPE_SLIDE,
 )
 from .notes import extract_notes_text, write_slide_notes
-from .paths import resolve_target_path, slide_rels_path
+from .paths import rels_path_for_path, resolve_target_path, slide_rels_path
 from .rels import get_relationships_target_by_type, read_rels_path
 
 
@@ -154,7 +154,7 @@ class Slide:
 
         Raises:
             RelsNotFoundError: If slide relationships are missing.
-            NotesNotFoundError: If notes path target cannot be read.
+            RelationshipTargetNotFoundError: If notes path target cannot be read.
         """
         rels_path = slide_rels_path(self._work_dir, self.slide_path)
         slide_rels = read_rels_path(rels_path)
@@ -170,11 +170,12 @@ class Slide:
         notes_xml_path = resolve_target_path(self.slide_path, notes_target)
         notes_path = self._work_dir / notes_xml_path
 
-        try:
-            notes_element = ET.fromstring(notes_path.read_bytes())
-        except Exception as e:
-            raise NotesNotFoundError(self.index) from e
+        if not notes_path.exists():
+            raise RelationshipTargetNotFoundError(
+                rels_path_for_path(self.slide_path), notes_xml_path
+            )
 
+        notes_element = ET.fromstring(notes_path.read_bytes())
         return extract_notes_text(notes_element)
 
     def _reload_audio(self) -> None:
@@ -190,6 +191,7 @@ class Slide:
 
         Raises:
             FileNotFoundError: If MP3 file is missing.
+            SlideXmlNotFoundError: If the slide XML file is missing.
         """
         upsert_slide_audio(self._work_dir, self.slide_path, mp3_path)
         self._reload_audio()
@@ -322,7 +324,8 @@ class PptxFile:
 
         Raises:
             RelsNotFoundError: If a slide relationships file is missing.
-            NotesNotFoundError: If a notes path cannot be read for a slide.
+            RelationshipTargetNotFoundError: If a notes path cannot be read for
+                a slide.
         """
         return [slide.notes for slide in self.slides]
 
@@ -354,6 +357,7 @@ class PptxFile:
         Raises:
             SlideNotFoundError: If slide index is out of range.
             FileNotFoundError: If MP3 file is missing.
+            SlideXmlNotFoundError: If the slide XML file is missing.
         """
         slide = self._get_slide(slide_index)
         slide.add_audio(mp3_path)

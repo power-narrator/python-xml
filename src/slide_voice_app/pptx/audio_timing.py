@@ -48,6 +48,7 @@ def _get_max_ctn_id(slide_root: ET.Element) -> int:
     ids = (
         int(elem.get("id", ""))
         for elem in slide_root.findall(XPATH_P_CTN_WITH_ID, namespaces=NSMAP)
+        if elem.get("id", "").isdigit()
     )
 
     return max(ids, default=0)

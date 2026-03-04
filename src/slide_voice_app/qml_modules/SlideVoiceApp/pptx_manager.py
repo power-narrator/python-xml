@@ -12,6 +12,7 @@ from slide_voice_app.pptx.exceptions import (
     InvalidPptxError,
     RelsNotFoundError,
     SlideNotFoundError,
+    SlideXmlNotFoundError,
 )
 
 QML_IMPORT_NAME = "SlideVoiceApp"
@@ -72,6 +73,9 @@ class PPTXManager(QObject):
         except RelsNotFoundError as e:
             self._unload_file()
             self.errorOccurred.emit(str(e))
+        except SlideXmlNotFoundError as e:
+            self._unload_file()
+            self.errorOccurred.emit(str(e))
         except Exception as e:
             self._unload_file()
             self.errorOccurred.emit(f"Failed to open file: {e}")
@@ -93,6 +97,8 @@ class PPTXManager(QObject):
         except FileNotFoundError as e:
             self.errorOccurred.emit(f"File not found: {e}")
         except SlideNotFoundError as e:
+            self.errorOccurred.emit(str(e))
+        except SlideXmlNotFoundError as e:
             self.errorOccurred.emit(str(e))
         except Exception as e:
             self.errorOccurred.emit(f"Failed to save audio: {e}")
