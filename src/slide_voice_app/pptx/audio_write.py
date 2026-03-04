@@ -117,9 +117,6 @@ def delete_slide_audio(work_dir: Path, slide_path: str, audio: Audio) -> None:
     rels_root = ET.fromstring(rels_file.read_bytes())
     ids_to_remove = {audio.audio_rid, audio.media_rid, audio.image_rid}
 
-    if not ids_to_remove:
-        return
-
     for rid in ids_to_remove:
         for relationship in rels_root.findall(
             XPATH_RELATIONSHIP_BY_ID.format(rid=rid),
