@@ -7,8 +7,8 @@ from urllib.request import url2pathname
 from PySide6.QtCore import Property, QObject, Signal, Slot
 from PySide6.QtQml import QmlElement, QmlSingleton
 
-from slide_voice_app.pptx import PptxFile
-from slide_voice_app.pptx.exceptions import (
+from slide_voice_pptx import PptxFile
+from slide_voice_pptx.exceptions import (
     InvalidPptxError,
     RelsNotFoundError,
     SlideNotFoundError,

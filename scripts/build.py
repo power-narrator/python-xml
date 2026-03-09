@@ -27,7 +27,7 @@ def run_build():
                 "--output-filename=slide-voice-app",
                 "--mode=app",
                 f"--output-dir={BASE_DIR / 'dist'}",
-                "--include-data-files=src/slide_voice_app/pptx/resources/narration-icon.png=slide_voice_app/pptx/resources/narration-icon.png",
+                "--include-data-files=src/slide_voice_pptx/resources/narration-icon.png=slide_voice_pptx/resources/narration-icon.png",
                 PKG_DIR,
             ],
             check=True,

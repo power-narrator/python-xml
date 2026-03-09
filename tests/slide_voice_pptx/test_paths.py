@@ -1,4 +1,4 @@
-from slide_voice_app.pptx.paths import (
+from slide_voice_pptx.paths import (
     relative_target_path,
     rels_path_for_path,
     resolve_target_path,
