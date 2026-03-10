@@ -38,7 +38,7 @@ def load_slide_audio(work_dir: Path, slide_path: str) -> list[Audio]:
     slide_root = ET.fromstring(slide_file.read_bytes())
     audio_entries: list[Audio] = []
     needed_rids: set[str] = set()
-    entry_parts: list[tuple[str, str, int, str, str, str]] = []
+    entry_parts: list[tuple[str, int, str, str, str]] = []
 
     for pic in slide_root.findall(XPATH_P_PIC, namespaces=NSMAP):
         audio_file = pic.find(XPATH_PIC_AUDIO_FILE, namespaces=NSMAP)
@@ -67,17 +67,14 @@ def load_slide_audio(work_dir: Path, slide_path: str) -> list[Audio]:
             media_el.get(f"{{{NAMESPACE_R}}}embed") if media_el is not None else None
         )
         image_rid = blip.get(f"{{{NAMESPACE_R}}}embed") if blip is not None else None
-        audio_id = f"spid:{spid}"
 
         if audio_rid is None or media_rid is None or image_rid is None or spid is None:
             continue
 
         needed_rids.add(audio_rid)
-        needed_rids.add(media_rid)
 
         entry_parts.append(
             (
-                audio_id,
                 name,
                 spid,
                 audio_rid,
@@ -96,25 +93,20 @@ def load_slide_audio(work_dir: Path, slide_path: str) -> list[Audio]:
             only_ids=needed_rids,
         )
 
-    for audio_id, name, spid, audio_rid, media_rid, image_rid in entry_parts:
+    for name, spid, audio_rid, media_rid, image_rid in entry_parts:
         target = rels_targets.get(audio_rid)
-
-        if target is None:
-            target = rels_targets.get(media_rid)
 
         if target is None:
             continue
 
         audio_entries.append(
             Audio(
-                audio_id=audio_id,
                 name=name,
                 spid=spid,
                 audio_rid=audio_rid,
                 media_rid=media_rid,
                 image_rid=image_rid,
                 target=target,
-                from_workspace=True,
             )
         )
 

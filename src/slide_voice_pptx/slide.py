@@ -35,7 +35,6 @@ class Slide:
         self._notes = self._read_notes()
         self.notes_changed = False
         self.audio: list[Audio] = load_slide_audio(self._work_dir, self.slide_path)
-        self._audio_by_id: dict[str, Audio] = {a.audio_id: a for a in self.audio}
 
     @property
     def notes(self) -> str:
@@ -94,7 +93,6 @@ class Slide:
     def _reload_audio(self) -> None:
         """Reload slide audio from workspace files."""
         self.audio = load_slide_audio(self._work_dir, self.slide_path)
-        self._audio_by_id = {item.audio_id: item for item in self.audio}
 
     def add_audio(self, mp3_path: Path) -> None:
         """Upsert audio for this slide immediately.
@@ -109,16 +107,11 @@ class Slide:
         upsert_slide_audio(self._work_dir, self.slide_path, mp3_path)
         self._reload_audio()
 
-    def delete_audio(self, audio_id: str) -> None:
-        """Delete one slide audio entry immediately.
+    def delete_audio(self, name: str) -> None:
+        """Delete the first matching named slide audio entry immediately.
 
         Args:
-            audio_id: In-memory audio identifier.
+            name: Audio name.
         """
-        audio = self._audio_by_id.get(audio_id)
-
-        if audio is None:
-            return
-
-        delete_slide_audio(self._work_dir, self.slide_path, audio)
+        delete_slide_audio(self._work_dir, self.slide_path, name)
         self._reload_audio()
