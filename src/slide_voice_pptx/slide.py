@@ -112,6 +112,9 @@ class Slide:
 
         Args:
             name: Audio name.
+
+        Raises:
+            AudioNotFoundError: If no matching audio exists on the slide.
         """
         delete_slide_audio(self._work_dir, self.slide_path, name)
         self._reload_audio()

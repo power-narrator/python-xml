@@ -17,6 +17,16 @@ XPATH_P_SPTGT_WITH_SPID = ".//p:spTgt[@spid]"
 XPATH_P_SPTGT_BY_SPID = ".//p:spTgt[@spid='{spid}']"
 XPATH_P_CTN_WITH_ID = ".//p:cTn[@id]"
 XPATH_TIMING_CONDS_WITH_DELAY = ".//p:par/p:cTn/p:stCondLst/p:cond[@delay]"
+XPATH_P_SEQ = ".//p:seq"
+XPATH_P_SEQ_CHILD = "p:seq"
+XPATH_P_TMROOT_CHILD_TNLST = ".//p:cTn[@nodeType='tmRoot']/p:childTnLst"
+XPATH_P_MAINSEQ_CHILD_TNLST = (
+    ".//p:cTn[@nodeType='mainSeq']/p:childTnLst/p:par/p:cTn/p:childTnLst"
+)
+XPATH_P_SEQ_MAINSEQ_CTN = "p:cTn[@nodeType='mainSeq']"
+XPATH_P_SEQ_INTERACTIVE_CTN_BY_SPID = (
+    "p:cTn[@nodeType='interactiveSeq']//p:spTgt[@spid='{spid}']"
+)
 
 XPATH_P_PIC = ".//p:pic"
 XPATH_PIC_CNVPR = "p:nvPicPr/p:cNvPr[@id]"
@@ -24,5 +34,5 @@ XPATH_PIC_AUDIO_FILE = "p:nvPicPr/p:nvPr/a:audioFile[@r:link]"
 XPATH_PIC_MEDIA = "p:nvPicPr/p:nvPr/p:extLst/p:ext/p14:media[@r:embed]"
 XPATH_PIC_BLIP = "p:blipFill/a:blip[@r:embed]"
 
-XPATH_P_PAR = ".//p:par"
+XPATH_P_TIMING = "p:timing"
 XPATH_P_AUDIO = ".//p:audio"

@@ -3,39 +3,184 @@
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from ..exceptions import SlideXmlNotFoundError
-from ..namespaces import NSMAP, NSMAP_RELS
-from ..paths import resolve_target_path, slide_rels_path
+from slide_voice_pptx.rels import get_relationship_id_target_map
+
+from ..exceptions import AudioNotFoundError, SlideXmlNotFoundError
+from ..namespaces import NAMESPACE_CT, NAMESPACE_R, NSMAP, NSMAP_RELS
+from ..paths import resolve_target_path, slide_rels_path, source_path_for_rels_path
 from ..xpath import (
     XPATH_P_AUDIO,
-    XPATH_P_PAR,
     XPATH_P_PIC,
+    XPATH_P_SEQ,
+    XPATH_P_SEQ_CHILD,
+    XPATH_P_SEQ_INTERACTIVE_CTN_BY_SPID,
+    XPATH_P_SEQ_MAINSEQ_CTN,
     XPATH_P_SPTGT_BY_SPID,
+    XPATH_P_TIMING,
+    XPATH_P_TMROOT_CHILD_TNLST,
+    XPATH_P_MAINSEQ_CHILD_TNLST,
+    XPATH_PIC_AUDIO_FILE,
+    XPATH_PIC_BLIP,
     XPATH_PIC_CNVPR,
+    XPATH_PIC_MEDIA,
     XPATH_RELATIONSHIP_BY_ID,
 )
 from .audio_embed import add_audio_to_slide
-from .audio_model import Audio
 from .audio_read import load_slide_audio
 
 
-def _remove_nodes_with_spid_target(
+def _slide_uses_relationship_id(slide_root: ET.Element, rid: str) -> bool:
+    """Return whether the slide XML still references a relationship ID."""
+    rel_attr = f"{{{NAMESPACE_R}}}link"
+    embed_attr = f"{{{NAMESPACE_R}}}embed"
+
+    for pic in slide_root.findall(XPATH_P_PIC, namespaces=NSMAP):
+        audio_file = pic.find(XPATH_PIC_AUDIO_FILE, namespaces=NSMAP)
+        media = pic.find(XPATH_PIC_MEDIA, namespaces=NSMAP)
+        blip = pic.find(XPATH_PIC_BLIP, namespaces=NSMAP)
+
+        if audio_file is not None and audio_file.get(rel_attr) == rid:
+            return True
+
+        if media is not None and media.get(embed_attr) == rid:
+            return True
+
+        if blip is not None and blip.get(embed_attr) == rid:
+            return True
+
+    return False
+
+
+def _remove_empty_timing(slide_root: ET.Element) -> None:
+    """Prune empty timing wrappers and remove timing when nothing remains."""
+    timing = slide_root.find(XPATH_P_TIMING, namespaces=NSMAP)
+
+    if timing is None:
+        return
+
+    if timing.find(XPATH_P_SEQ, namespaces=NSMAP) is None:
+        slide_root.remove(timing)
+
+
+def _remove_non_interactive_sequences_with_spid_target(
     slide_root: ET.Element,
-    parent_map: dict[ET.Element, ET.Element],
-    nodes_xpath: str,
     spid: int,
 ) -> None:
-    """Remove nodes whose subtree contains a target shape ID."""
+    """Remove non-interactive sequence wrappers targeting a specific shape ID."""
     sp_tgt_xpath = XPATH_P_SPTGT_BY_SPID.format(spid=spid)
+    par_parent = slide_root.find(XPATH_P_MAINSEQ_CHILD_TNLST, namespaces=NSMAP)
 
-    for node in slide_root.findall(nodes_xpath, namespaces=NSMAP):
-        if node.find(sp_tgt_xpath, namespaces=NSMAP) is None:
+    if par_parent is None:
+        return
+
+    for par in par_parent.findall("p:par", namespaces=NSMAP):
+        if par.find(sp_tgt_xpath, namespaces=NSMAP) is None:
             continue
 
-        parent = parent_map.get(node)
+        par_parent.remove(par)
 
-        if parent is not None:
-            parent.remove(node)
+    if len(par_parent) != 0:
+        return
+
+    seq_parent = slide_root.find(XPATH_P_TMROOT_CHILD_TNLST, namespaces=NSMAP)
+
+    if seq_parent is None:
+        return
+
+    for seq in seq_parent.findall(XPATH_P_SEQ_CHILD, namespaces=NSMAP):
+        c_tn = seq.find(XPATH_P_SEQ_MAINSEQ_CTN, namespaces=NSMAP)
+
+        if c_tn is None:
+            continue
+
+        seq_parent.remove(seq)
+
+
+def _remove_interactive_sequences_with_spid_target(
+    slide_root: ET.Element,
+    spid: int,
+) -> None:
+    """Remove interactive sequence wrappers targeting a specific shape ID."""
+    interactive_seq_xpath = XPATH_P_SEQ_INTERACTIVE_CTN_BY_SPID.format(spid=spid)
+    seq_parent = slide_root.find(XPATH_P_TMROOT_CHILD_TNLST, namespaces=NSMAP)
+
+    if seq_parent is None:
+        return
+
+    for seq in seq_parent.findall(XPATH_P_SEQ_CHILD, namespaces=NSMAP):
+        c_tn = seq.find(interactive_seq_xpath, namespaces=NSMAP)
+
+        if c_tn is None:
+            continue
+
+        seq_parent.remove(seq)
+
+
+def _remove_audio_nodes_with_spid_target(
+    slide_root: ET.Element,
+    spid: int,
+) -> None:
+    """Remove audio nodes targeting a specific shape ID."""
+    sp_tgt_xpath = XPATH_P_SPTGT_BY_SPID.format(spid=spid)
+    audio_parent = slide_root.find(XPATH_P_TMROOT_CHILD_TNLST, namespaces=NSMAP)
+
+    if audio_parent is None:
+        return
+
+    for audio in audio_parent.findall(XPATH_P_AUDIO, namespaces=NSMAP):
+        if audio.find(sp_tgt_xpath, namespaces=NSMAP) is None:
+            continue
+
+        if audio_parent is not None:
+            audio_parent.remove(audio)
+
+
+def _remove_content_type_default_if_unused(
+    work_dir: Path, media_dir: Path, extension: str
+) -> None:
+    """Remove a content-type default when no files use that extension."""
+    if any(media_dir.glob(f"*.{extension}")):
+        return
+
+    content_types_path = work_dir / "[Content_Types].xml"
+
+    if not content_types_path.exists():
+        return
+
+    content_types_root = ET.fromstring(content_types_path.read_bytes())
+    default_tag = f"{{{NAMESPACE_CT}}}Default"
+    removed = False
+
+    for default in list(content_types_root.findall(default_tag)):
+        if default.get("Extension") != extension:
+            continue
+
+        content_types_root.remove(default)
+        removed = True
+
+    if removed:
+        content_types_path.write_bytes(
+            ET.tostring(content_types_root, encoding="UTF-8", xml_declaration=True)
+        )
+
+
+def _slides_use_target(work_dir: Path, target_path: str) -> bool:
+    """Return whether any slide relationships still resolve to a target path."""
+    slides_rels_dir = work_dir / "ppt/slides/_rels"
+
+    if not slides_rels_dir.exists():
+        return False
+
+    for rels_path in slides_rels_dir.glob("*.rels"):
+        rels_part_path = rels_path.relative_to(work_dir).as_posix()
+        source_path = source_path_for_rels_path(rels_part_path)
+        rels_root = ET.fromstring(rels_path.read_bytes())
+
+        for target in get_relationship_id_target_map(rels_root).values():
+            if resolve_target_path(source_path, target) == target_path:
+                return True
+
+    return False
 
 
 def upsert_slide_audio(work_dir: Path, slide_path: str, mp3_path: Path) -> None:
@@ -72,17 +217,25 @@ def upsert_slide_audio(work_dir: Path, slide_path: str, mp3_path: Path) -> None:
     add_audio_to_slide(work_dir, slide_path, mp3_path)
 
 
-def delete_slide_audio(work_dir: Path, slide_path: str, audio: Audio) -> None:
-    """Delete one audio object from slide XML and relationships.
+def delete_slide_audio(work_dir: Path, slide_path: str, name: str) -> None:
+    """Delete the first matching named audio object from slide XML.
 
     Args:
         work_dir: Extracted PPTX workspace root.
         slide_path: Slide OOXML path.
-        audio: Audio entry to remove.
+        name: Audio name to remove.
 
     Raises:
         SlideXmlNotFoundError: If the slide XML file does not exist.
     """
+    audio = next(
+        (item for item in load_slide_audio(work_dir, slide_path) if item.name == name),
+        None,
+    )
+
+    if audio is None:
+        raise AudioNotFoundError(slide_path, name)
+
     spid = audio.spid
     slide_file = work_dir / slide_path
 
@@ -103,8 +256,10 @@ def delete_slide_audio(work_dir: Path, slide_path: str, audio: Audio) -> None:
         if parent is not None:
             parent.remove(pic)
 
-    _remove_nodes_with_spid_target(slide_root, parent_map, XPATH_P_PAR, spid)
-    _remove_nodes_with_spid_target(slide_root, parent_map, XPATH_P_AUDIO, spid)
+    _remove_non_interactive_sequences_with_spid_target(slide_root, spid)
+    _remove_interactive_sequences_with_spid_target(slide_root, spid)
+    _remove_audio_nodes_with_spid_target(slide_root, spid)
+    _remove_empty_timing(slide_root)
 
     slide_file.write_bytes(
         ET.tostring(slide_root, encoding="UTF-8", xml_declaration=True)
@@ -116,7 +271,14 @@ def delete_slide_audio(work_dir: Path, slide_path: str, audio: Audio) -> None:
         return
 
     rels_root = ET.fromstring(rels_file.read_bytes())
-    ids_to_remove = {audio.audio_rid, audio.media_rid, audio.image_rid}
+    ids_to_remove = {
+        rid
+        for rid in (audio.audio_rid, audio.media_rid, audio.image_rid)
+        if not _slide_uses_relationship_id(slide_root, rid)
+    }
+    targets_to_check = get_relationship_id_target_map(
+        rels_root, only_ids=ids_to_remove
+    ).values()
 
     for rid in ids_to_remove:
         for relationship in rels_root.findall(
@@ -128,3 +290,19 @@ def delete_slide_audio(work_dir: Path, slide_path: str, audio: Audio) -> None:
     rels_file.write_bytes(
         ET.tostring(rels_root, encoding="UTF-8", xml_declaration=True)
     )
+    media_dir = work_dir / "ppt/media"
+
+    for target in targets_to_check:
+        target_path = resolve_target_path(slide_path, target)
+
+        if _slides_use_target(work_dir, target_path):
+            continue
+
+        absolute_target_path = work_dir / target_path
+
+        if absolute_target_path.exists():
+            absolute_target_path.unlink()
+
+    if media_dir.exists():
+        _remove_content_type_default_if_unused(work_dir, media_dir, "mp3")
+        _remove_content_type_default_if_unused(work_dir, media_dir, "png")

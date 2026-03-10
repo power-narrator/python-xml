@@ -36,6 +36,15 @@ class SlideXmlNotFoundError(PptxError):
         super().__init__(f"Slide XML not found in workspace: '{slide_path}'")
 
 
+class AudioNotFoundError(PptxError):
+    """Raised when a requested audio name does not exist on a slide."""
+
+    def __init__(self, slide_path: str, audio_name: str) -> None:
+        self.slide_path = slide_path
+        self.audio_name = audio_name
+        super().__init__(f"Audio '{audio_name}' not found on slide '{slide_path}'.")
+
+
 class RelsNotFoundError(PptxError):
     """Raised when a .rels file does not exist in the PPTX archive."""
 
