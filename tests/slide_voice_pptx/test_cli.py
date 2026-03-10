@@ -22,8 +22,8 @@ class FakePptxFile:
     def __exit__(self, exc_type, exc_value, traceback) -> None:
         return None
 
-    def get_all_slide_notes(self) -> list[str]:
-        return self.notes
+    def get_slides(self) -> list[dict[str, object]]:
+        return [{"notes": note, "audio": []} for note in self.notes]
 
     def set_slide_notes(self, slide_index: int, notes: str) -> None:
         if slide_index >= len(self.notes):
@@ -59,7 +59,7 @@ def test_cli_writes_results_and_exports_when_all_ops_succeed(
                 "input": "input.pptx",
                 "output": "output.pptx",
                 "ops": [
-                    {"op": "get_all_slide_notes", "args": {}},
+                    {"op": "get_slides", "args": {}},
                     {
                         "op": "set_slide_notes",
                         "args": {"slide_index": 0, "notes": "updated"},
@@ -80,7 +80,11 @@ def test_cli_writes_results_and_exports_when_all_ops_succeed(
     assert exit_code == 0
     assert results == {
         "results": [
-            {"success": True, "result": ["original"], "message": ""},
+            {
+                "success": True,
+                "result": [{"notes": "original", "audio": []}],
+                "message": "",
+            },
             {"success": True, "result": None, "message": ""},
             {"success": True, "result": None, "message": ""},
         ]
@@ -105,7 +109,7 @@ def test_cli_skips_export_when_any_operation_fails(tmp_path, monkeypatch) -> Non
                         "op": "set_slide_notes",
                         "args": {"slide_index": 5, "notes": "updated"},
                     },
-                    {"op": "get_all_slide_notes", "args": {}},
+                    {"op": "get_slides", "args": {}},
                 ],
             }
         ),

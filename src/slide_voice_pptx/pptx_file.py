@@ -128,15 +128,19 @@ class PptxFile:
 
         return self.slides[slide_index]
 
-    def get_all_slide_notes(self) -> list[str]:
-        """Get notes for all slides.
+    def get_slides(self) -> list[dict[str, object]]:
+        """Get serializable snapshots of all slides.
 
-        Raises:
-            RelsNotFoundError: If a slide relationships file is missing.
-            RelationshipTargetNotFoundError: If a notes path cannot be read for
-                a slide.
+        Returns:
+            List of slide objects containing notes and audio name data.
         """
-        return [slide.notes for slide in self.slides]
+        return [
+            {
+                "notes": slide.notes,
+                "audio": [{"name": audio.name} for audio in slide.audio],
+            }
+            for slide in self.slides
+        ]
 
     def set_slide_notes(self, slide_index: int, notes: str) -> None:
         """Update in-memory notes for a single slide.
@@ -149,7 +153,7 @@ class PptxFile:
             SlideNotFoundError: If slide index is out of range.
         """
         slide = self._get_slide(slide_index)
-        slide.set_notes(notes)
+        slide.notes = notes
 
     def save_audio_for_slide(self, slide_index: int, mp3_path: Path) -> None:
         """Apply audio update for a slide immediately.
@@ -179,19 +183,6 @@ class PptxFile:
         """
         slide = self._get_slide(slide_index)
         slide.delete_audio(name)
-
-    def has_audio_for_slide(self, slide_index: int, name: str) -> bool:
-        """Return whether a slide has an audio entry with the given name.
-
-        Args:
-            slide_index: Zero-based slide index.
-            name: Audio name to search for.
-
-        Raises:
-            SlideNotFoundError: If slide index is out of range.
-        """
-        slide = self._get_slide(slide_index)
-        return any(audio.name == name for audio in slide.audio)
 
     def export_to(self, output_path: Path) -> None:
         """Export current workspace into a .pptx file.

@@ -54,9 +54,7 @@ ApplicationWindow {
         active: false
         source: "SettingsWindow.qml"
 
-        onLoaded: {
-            item.visible = true;
-        }
+        onLoaded: item.visible = true
     }
 
     Connections {
@@ -65,10 +63,6 @@ ApplicationWindow {
         function onClosing() {
             settingsLoader.active = false;
         }
-    }
-
-    ListModel {
-        id: slideModel
     }
 
     ListModel {
@@ -82,19 +76,21 @@ ApplicationWindow {
     Connections {
         target: PPTXManager
 
-        function onSlidesLoaded(slides) {
-            slideModel.clear();
-            slides.forEach(slide => slideModel.append(slide));
-            slideList.currentIndex = slideModel.count > 0 ? 0 : -1;
-        }
-
         function onErrorOccurred(message) {
             errorDialog.text = message;
             errorDialog.open();
         }
 
-        function onAudioStateChanged() {
-            deleteAudioButton.refreshEnabledState();
+        function onCurrentSlideIndexChanged() {
+            if (slideList.currentIndex !== PPTXManager.currentSlideIndex) {
+                slideList.currentIndex = PPTXManager.currentSlideIndex;
+            }
+        }
+
+        function onCurrentSlideNotesChanged() {
+            if (!notesEditor.activeFocus || notesEditor.text !== PPTXManager.currentSlideNotes) {
+                notesEditor.text = PPTXManager.currentSlideNotes;
+            }
         }
     }
 
@@ -127,6 +123,7 @@ ApplicationWindow {
             providerComboBox.currentIndex = 0;
             TTSManager.setProvider(providerComboBox.currentValue);
         }
+        notesEditor.text = PPTXManager.currentSlideNotes;
     }
 
     RowLayout {
@@ -134,12 +131,11 @@ ApplicationWindow {
         anchors.margins: 10
         spacing: 10
 
-        // Left pane: Slide list
         ListView {
             id: slideList
             Layout.preferredWidth: 140
             Layout.fillHeight: true
-            model: slideModel
+            model: PPTXManager.slidesModel
             spacing: 10
 
             delegate: Rectangle {
@@ -159,24 +155,19 @@ ApplicationWindow {
 
                 MouseArea {
                     anchors.fill: parent
-                    onClicked: {
-                        slideItem.ListView.view.currentIndex = slideItem.model.index;
-                    }
+                    onClicked: slideItem.ListView.view.currentIndex = slideItem.model.index
                 }
             }
 
             onCurrentIndexChanged: {
                 TTSManager.currentSlideHasAudio = false;
-                notesEditor.text = slideModel.get(slideList.currentIndex)?.notes ?? "";
-                deleteAudioButton.refreshEnabledState();
+                PPTXManager.currentSlideIndex = currentIndex;
             }
         }
 
-        // Right pane: Notes editor and controls
         ColumnLayout {
             spacing: 10
 
-            // Notes text area
             ScrollView {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -189,10 +180,7 @@ ApplicationWindow {
                     readonly property string textToGenerate: selectedText.length > 0 ? selectedText : text
 
                     onTextChanged: {
-                        if (activeFocus && slideList.currentIndex >= 0) {
-                            slideModel.setProperty(slideList.currentIndex, "notes", text);
-                            PPTXManager.setSlideNotes(slideList.currentIndex, text);
-                        }
+                        PPTXManager.currentSlideNotes = text;
                     }
                 }
             }
@@ -268,28 +256,14 @@ ApplicationWindow {
 
                 Button {
                     text: "Insert Audio"
-                    enabled: !TTSManager.isGenerating && PPTXManager.fileLoaded && TTSManager.currentSlideHasAudio
-                    onClicked: {
-                        PPTXManager.saveAudioForSlide(slideList.currentIndex, TTSManager.outputFile);
-                    }
+                    enabled: !TTSManager.isGenerating && PPTXManager.fileLoaded && TTSManager.hasGeneratedAudio
+                    onClicked: PPTXManager.saveAudioForCurrentSlide(TTSManager.outputFile)
                 }
 
                 Button {
-                    id: deleteAudioButton
-                    property bool hasEmbeddedAudio: false
                     text: "Delete Audio"
-                    enabled: !TTSManager.isGenerating && PPTXManager.fileLoaded && hasEmbeddedAudio
-
-                    function refreshEnabledState() {
-                        hasEmbeddedAudio = PPTXManager.hasAudioForSlide(
-                            slideList.currentIndex,
-                            TTSManager.outputFilename
-                        );
-                    }
-
-                    onClicked: {
-                        PPTXManager.deleteAudioForSlide(slideList.currentIndex, TTSManager.outputFilename);
-                    }
+                    enabled: !TTSManager.isGenerating && PPTXManager.fileLoaded && PPTXManager.currentSlideHasEmbeddedAudio
+                    onClicked: PPTXManager.deleteAudioForCurrentSlide()
                 }
             }
         }
