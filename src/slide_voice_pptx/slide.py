@@ -31,18 +31,19 @@ class Slide:
             work_dir: Extracted PPTX workspace directory.
         """
         self.index = index
-        self.slide_path = slide_path
+        self._slide_path = slide_path
         self._work_dir = work_dir
         self._notes = self._read_notes()
-        self.notes_changed = False
-        self.audio: list[Audio] = load_slide_audio(self._work_dir, self.slide_path)
+        self._notes_changed = False
+        self.audio: list[Audio] = load_slide_audio(self._work_dir, self._slide_path)
 
     @property
     def notes(self) -> str:
         """Get current in-memory notes text for this slide."""
         return self._notes
 
-    def set_notes(self, text: str) -> None:
+    @notes.setter
+    def notes(self, text: str) -> None:
         """Update in-memory notes text and mark slide as changed.
 
         Args:
@@ -50,15 +51,15 @@ class Slide:
         """
         if text != self._notes:
             self._notes = text
-            self.notes_changed = True
+            self._notes_changed = True
 
     def save_notes(self) -> None:
         """Persist notes to workspace if slide notes were edited."""
-        if not self.notes_changed:
+        if not self._notes_changed:
             return
 
-        write_slide_notes(self._work_dir, self.slide_path, self._notes)
-        self.notes_changed = False
+        write_slide_notes(self._work_dir, self._slide_path, self._notes)
+        self._notes_changed = False
 
     def _read_notes(self) -> str:
         """Read notes text from extracted workspace files.
@@ -69,7 +70,7 @@ class Slide:
         Raises:
             RelationshipTargetNotFoundError: If notes path target cannot be read.
         """
-        rels_path = slide_rels_path(self._work_dir, self.slide_path)
+        rels_path = slide_rels_path(self._work_dir, self._slide_path)
         slide_rels = read_rels_path(rels_path)
 
         if (
@@ -80,12 +81,12 @@ class Slide:
         ) is None:
             return ""
 
-        notes_xml_path = resolve_target_path(self.slide_path, notes_target)
+        notes_xml_path = resolve_target_path(self._slide_path, notes_target)
         notes_path = self._work_dir / notes_xml_path
 
         if not notes_path.exists():
             raise RelationshipTargetNotFoundError(
-                rels_path_for_path(self.slide_path), notes_xml_path
+                rels_path_for_path(self._slide_path), notes_xml_path
             )
 
         notes_element = ET.fromstring(notes_path.read_bytes())
@@ -93,7 +94,7 @@ class Slide:
 
     def _reload_audio(self) -> None:
         """Reload slide audio from workspace files."""
-        self.audio = load_slide_audio(self._work_dir, self.slide_path)
+        self.audio = load_slide_audio(self._work_dir, self._slide_path)
 
     def add_audio(self, mp3_path: Path) -> None:
         """Upsert audio for this slide immediately.
@@ -105,7 +106,7 @@ class Slide:
             FileNotFoundError: If MP3 file is missing.
             SlideXmlNotFoundError: If the slide XML file is missing.
         """
-        upsert_slide_audio(self._work_dir, self.slide_path, mp3_path)
+        upsert_slide_audio(self._work_dir, self._slide_path, mp3_path)
         self._reload_audio()
 
     def delete_audio(self, name: str) -> None:
@@ -117,5 +118,5 @@ class Slide:
         Raises:
             AudioNotFoundError: If no matching audio exists on the slide.
         """
-        delete_slide_audio(self._work_dir, self.slide_path, name)
+        delete_slide_audio(self._work_dir, self._slide_path, name)
         self._reload_audio()
