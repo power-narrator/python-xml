@@ -5,7 +5,8 @@ from pathlib import Path
 
 from .audio.audio_model import Audio
 from .audio.audio_read import load_slide_audio
-from .audio.audio_write import delete_slide_audio, upsert_slide_audio
+from .audio.audio_delete import delete_slide_audio
+from .audio.audio_upsert import upsert_slide_audio
 from .exceptions import RelationshipTargetNotFoundError
 from .namespaces import REL_TYPE_NOTES_SLIDE
 from .notes import extract_notes_text, write_slide_notes
