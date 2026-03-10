@@ -100,7 +100,8 @@ ApplicationWindow {
     }
 
     Connections {
-        target: TTSManager.voicesModel
+        // Property constant attribute does not work, model has QObject in inheritance chain
+        target: TTSManager.voicesModel // qmllint disable stale-property-read incompatible-type
 
         function onModelReset() {
             voiceComboBox.currentIndex = voiceComboBox.count > 0 ? 0 : -1;
@@ -183,7 +184,8 @@ ApplicationWindow {
 
                 ComboBox {
                     id: providerComboBox
-                    model: TTSManager.providersModel
+                    // Property constant attribute does not work
+                    model: TTSManager.providersModel // qmllint disable stale-property-read
                     textRole: "name"
                     valueRole: "id"
                     displayText: currentIndex >= 0 ? currentText : "Provider"
