@@ -11,12 +11,145 @@ from PySide6.QtCore import (
     Qt,
     Slot,
 )
+from PySide6.QtQml import QmlElement
 
 from slide_voice_app.audio_identity import EMBEDDED_AUDIO_BASENAME
 from slide_voice_app.tts.provider import ProviderInfo, Voice
 from slide_voice_pptx.pptx_file import PptxFile
 
+QML_IMPORT_NAME = "SlideVoiceApp"
+QML_IMPORT_MAJOR_VERSION = 1
 
+
+class ProviderRole(IntEnum):
+    Id = Qt.ItemDataRole.UserRole + 1
+    Name = Qt.ItemDataRole.UserRole + 2
+
+
+@QmlElement
+class ProvidersModel(QAbstractListModel):
+    """Read-only model of available TTS providers."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._providers: list[ProviderInfo] = []
+        self.Role = ProviderRole
+
+    def rowCount(
+        self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()
+    ) -> int:
+        if parent.isValid():
+            return 0
+
+        return len(self._providers)
+
+    def data(
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        role: int = Qt.ItemDataRole.DisplayRole,
+    ) -> Any:
+        if not index.isValid():
+            return None
+
+        provider = self._providers[index.row()]
+
+        if role == self.Role.Id:
+            return provider.id
+
+        if role in {self.Role.Name, Qt.ItemDataRole.DisplayRole}:
+            return provider.name
+
+        return None
+
+    def roleNames(self) -> dict[int, QByteArray]:
+        return {
+            self.Role.Id: QByteArray(b"id"),
+            self.Role.Name: QByteArray(b"name"),
+        }
+
+    def setProviders(self, providers: list[ProviderInfo]) -> None:
+        self.beginResetModel()
+        self._providers = providers
+        self.endResetModel()
+
+    @Slot(int, result=str)
+    def providerIdAt(self, row: int) -> str:
+        if row < 0 or row >= len(self._providers):
+            return ""
+
+        return self._providers[row].id
+
+
+class VoicesRole(IntEnum):
+    Id = Qt.ItemDataRole.UserRole + 1
+    Name = Qt.ItemDataRole.UserRole + 2
+    LanguageCode = Qt.ItemDataRole.UserRole + 3
+    Gender = Qt.ItemDataRole.UserRole + 4
+
+
+@QmlElement
+class VoicesModel(QAbstractListModel):
+    """Read-only model of voices for the current provider."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._voices: list[Voice] = []
+        self.Role = VoicesRole
+
+    def rowCount(
+        self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()
+    ) -> int:
+        if parent.isValid():
+            return 0
+
+        return len(self._voices)
+
+    def data(
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        role: int = Qt.ItemDataRole.DisplayRole,
+    ) -> Any:
+        if not index.isValid():
+            return None
+
+        voice = self._voices[index.row()]
+
+        if role == self.Role.Id:
+            return voice.id
+
+        if role in {self.Role.Name, Qt.ItemDataRole.DisplayRole}:
+            return voice.name
+
+        if role == self.Role.LanguageCode:
+            return voice.language_code
+
+        if role == self.Role.Gender:
+            return voice.gender
+
+        return None
+
+    def roleNames(self) -> dict[int, QByteArray]:
+        return {
+            self.Role.Id: QByteArray(b"id"),
+            self.Role.Name: QByteArray(b"name"),
+            self.Role.LanguageCode: QByteArray(b"languageCode"),
+            self.Role.Gender: QByteArray(b"gender"),
+        }
+
+    def setVoices(self, voices: list[Voice]) -> None:
+        self.beginResetModel()
+        self._voices = voices
+        self.endResetModel()
+
+    def clear(self) -> None:
+        self.setVoices([])
+
+    @Slot(int, result=str)
+    def languageCodeAt(self, row: int) -> str:
+        if row < 0 or row >= len(self._voices):
+            return ""
+
+        return self._voices[row].language_code
 
 
 class SlidesModel(QAbstractListModel):

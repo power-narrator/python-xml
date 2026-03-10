@@ -65,14 +65,6 @@ ApplicationWindow {
         }
     }
 
-    ListModel {
-        id: providerModel
-    }
-
-    ListModel {
-        id: voiceModel
-    }
-
     Connections {
         target: PPTXManager
 
@@ -97,15 +89,21 @@ ApplicationWindow {
     Connections {
         target: TTSManager
 
-        function onVoicesReady(voices) {
-            voiceModel.clear();
-            const st = voices.forEach(voice => voiceModel.append(voice));
-            voiceComboBox.currentIndex = voiceModel.count > 0 ? 0 : -1;
-        }
-
         function onErrorOccurred(message) {
             errorDialog.text = message;
             errorDialog.open();
+        }
+
+        function onCurrentProviderChanged() {
+            providerComboBox.currentIndex = providerComboBox.indexOfValue(TTSManager.currentProvider);
+        }
+    }
+
+    Connections {
+        target: TTSManager.voicesModel
+
+        function onModelReset() {
+            voiceComboBox.currentIndex = voiceComboBox.count > 0 ? 0 : -1;
         }
     }
 
@@ -116,13 +114,7 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
-        let providers = TTSManager.getAvailableProviders();
-        providers.forEach(provider => providerModel.append(provider));
-
-        if (providerModel.count > 0) {
-            providerComboBox.currentIndex = 0;
-            TTSManager.setProvider(providerComboBox.currentValue);
-        }
+        providerComboBox.currentIndex = providerComboBox.indexOfValue(TTSManager.currentProvider);
         notesEditor.text = PPTXManager.currentSlideNotes;
     }
 
@@ -160,8 +152,8 @@ ApplicationWindow {
             }
 
             onCurrentIndexChanged: {
-                TTSManager.currentSlideHasAudio = false;
                 PPTXManager.currentSlideIndex = currentIndex;
+                TTSManager.hasGeneratedAudio = false;
             }
         }
 
@@ -185,31 +177,27 @@ ApplicationWindow {
                 }
             }
 
-            // Controls row
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 10
 
                 ComboBox {
                     id: providerComboBox
-                    model: providerModel
+                    model: TTSManager.providersModel
                     textRole: "name"
                     valueRole: "id"
                     displayText: currentIndex >= 0 ? currentText : "Provider"
                     enabled: !TTSManager.isGenerating && !TTSManager.isFetchingVoices
 
-                    onCurrentIndexChanged: {
-                        if (currentIndex >= 0) {
-                            // curretValue is not set at startup, so use model lookup
-                            TTSManager.setProvider(providerModel.get(currentIndex).id);
-                        }
-                    }
+                    // currentValue is not reliable on first load for this model,
+                    // so resolve the provider ID from the current index instead.
+                    onActivated: TTSManager.currentProvider = TTSManager.providersModel.providerIdAt(currentIndex)
                 }
 
                 ComboBox {
                     id: voiceComboBox
                     Layout.preferredWidth: 300
-                    model: voiceModel
+                    model: TTSManager.voicesModel
                     valueRole: "id"
                     textRole: "name"
                     enabled: !TTSManager.isGenerating && !TTSManager.isFetchingVoices
@@ -248,8 +236,7 @@ ApplicationWindow {
                         if (TTSManager.isPlaying) {
                             TTSManager.stopAudio();
                         } else {
-                            let languageCode = voiceModel.get(voiceComboBox.currentIndex).languageCode;
-                            TTSManager.generateAndPlay(notesEditor.textToGenerate, voiceComboBox.currentValue, languageCode);
+                            TTSManager.generateAudio(notesEditor.textToGenerate, voiceComboBox.currentValue, TTSManager.voicesModel.languageCodeAt(voiceComboBox.currentIndex));
                         }
                     }
                 }

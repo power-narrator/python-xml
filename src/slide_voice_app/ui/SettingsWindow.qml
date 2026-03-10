@@ -14,25 +14,11 @@ ApplicationWindow {
     flags: Qt.Dialog
 
     ListModel {
-        id: providerModel
-    }
-
-    ListModel {
         id: settingsModel
     }
 
     Settings {
         id: appSettings
-    }
-
-    Component.onCompleted: {
-        let providers = TTSManager.getAvailableProviders();
-        providers.forEach(provider => providerModel.append(provider));
-
-        if (providerModel.count > 0) {
-            providerComboBox.currentIndex = 0;
-            loadProviderSettings(providerComboBox.currentValue);
-        }
     }
 
     function loadProviderSettings(providerId) {
@@ -44,14 +30,32 @@ ApplicationWindow {
         if (providerComboBox.currentIndex < 0)
             return;
 
-        let providerId = providerComboBox.currentValue;
+        // currentValue is not reliable on first load for this model,
+        // so resolve the provider ID from the current index instead.
+        let providerId = TTSManager.providersModel.providerIdAt(providerComboBox.currentIndex);
 
         for (let i = 0; i < settingsModel.count; i++) {
             let setting = settingsModel.get(i);
             appSettings.setValue(setting.key, setting.value);
         }
 
-        TTSManager.setProvider(providerId);
+        TTSManager.currentProvider = providerId;
+    }
+
+    Component.onCompleted: {
+        providerComboBox.currentIndex = providerComboBox.indexOfValue(TTSManager.currentProvider);
+
+        if (providerComboBox.currentIndex >= 0) {
+            loadProviderSettings(TTSManager.providersModel.providerIdAt(providerComboBox.currentIndex));
+        }
+    }
+
+    Connections {
+        target: TTSManager
+
+        function onCurrentProviderChanged() {
+            providerComboBox.currentIndex = providerComboBox.indexOfValue(TTSManager.currentProvider);
+        }
     }
 
     ColumnLayout {
@@ -59,7 +63,6 @@ ApplicationWindow {
         anchors.margins: 20
         spacing: 20
 
-        // Provider selector
         RowLayout {
             Layout.fillWidth: true
             spacing: 10
@@ -71,25 +74,26 @@ ApplicationWindow {
             ComboBox {
                 id: providerComboBox
                 Layout.fillWidth: true
-                model: providerModel
+                model: TTSManager.providersModel
                 textRole: "name"
                 valueRole: "id"
 
                 onCurrentIndexChanged: {
                     if (currentIndex >= 0) {
-                        // currentValue not set on first run
-                        settingsWindow.loadProviderSettings(providerModel.get(currentIndex).id);
+                        // currentValue is not reliable on first load for this model,
+                        // so resolve the provider ID from the current index instead.
+                        settingsWindow.loadProviderSettings(TTSManager.providersModel.providerIdAt(currentIndex));
                     }
                 }
             }
         }
 
-        // Dynamic settings form
         ListView {
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 15
             model: settingsModel
+
             delegate: RowLayout {
                 id: settingList
                 required property string label
@@ -116,7 +120,6 @@ ApplicationWindow {
             }
         }
 
-        // Buttons
         RowLayout {
             Layout.alignment: Qt.AlignRight
             spacing: 10

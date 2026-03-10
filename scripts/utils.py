@@ -22,7 +22,7 @@ QML_MODULE_SPECS: list[QmlModuleSpec] = [
         import_name="SlideVoiceApp",
         major_version=1,
         minor_version=0,
-        source_files=["tts_manager.py", "pptx_manager.py"],
+        source_files=["models.py", "tts_manager.py", "pptx_manager.py"],
     ),
 ]
 
