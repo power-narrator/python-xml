@@ -1,0 +1,459 @@
+[
+    {
+        "classes": [
+            {
+                "className": "ProviderRole",
+                "qualifiedClassName": "ProviderRole",
+                "object": false,
+                "superClasses": [
+                    {
+                        "access": "public",
+                        "name": "IntEnum"
+                    }
+                ]
+            },
+            {
+                "className": "ProvidersModel",
+                "qualifiedClassName": "ProvidersModel",
+                "object": true,
+                "superClasses": [
+                    {
+                        "access": "public",
+                        "name": "QAbstractListModel"
+                    }
+                ],
+                "classInfos": [
+                    {
+                        "name": "QML.Element",
+                        "value": "auto"
+                    }
+                ],
+                "slots": [
+                    {
+                        "access": "public",
+                        "name": "providerIdAt",
+                        "arguments": [
+                            {
+                                "name": "a1",
+                                "type": "int"
+                            }
+                        ],
+                        "returnType": "QString"
+                    }
+                ]
+            },
+            {
+                "className": "VoicesRole",
+                "qualifiedClassName": "VoicesRole",
+                "object": false,
+                "superClasses": [
+                    {
+                        "access": "public",
+                        "name": "IntEnum"
+                    }
+                ]
+            },
+            {
+                "className": "VoicesModel",
+                "qualifiedClassName": "VoicesModel",
+                "object": true,
+                "superClasses": [
+                    {
+                        "access": "public",
+                        "name": "QAbstractListModel"
+                    }
+                ],
+                "classInfos": [
+                    {
+                        "name": "QML.Element",
+                        "value": "auto"
+                    }
+                ],
+                "slots": [
+                    {
+                        "access": "public",
+                        "name": "languageCodeAt",
+                        "arguments": [
+                            {
+                                "name": "a1",
+                                "type": "int"
+                            }
+                        ],
+                        "returnType": "QString"
+                    }
+                ]
+            },
+            {
+                "className": "Role",
+                "qualifiedClassName": "Role",
+                "object": false,
+                "superClasses": [
+                    {
+                        "access": "public",
+                        "name": "IntEnum"
+                    }
+                ]
+            },
+            {
+                "className": "SlidesModel",
+                "qualifiedClassName": "SlidesModel",
+                "object": true,
+                "superClasses": [
+                    {
+                        "access": "public",
+                        "name": "QAbstractListModel"
+                    }
+                ]
+            }
+        ],
+        "outputRevision": 68,
+        "QML_IMPORT_NAME": "PowerNarrator",
+        "QML_IMPORT_MAJOR_VERSION": 1,
+        "QML_IMPORT_MINOR_VERSION": 0,
+        "QT_MODULES": [
+            "QtCore",
+            "QtQml"
+        ],
+        "inputFile": "/Users/proglab/Documents/python-xml/src/power_narrator/ui/qml_modules/PowerNarrator/models.py"
+    },
+    {
+        "classes": [
+            {
+                "className": "TTSManager",
+                "qualifiedClassName": "TTSManager",
+                "object": true,
+                "superClasses": [
+                    {
+                        "access": "public",
+                        "name": "QObject"
+                    }
+                ],
+                "classInfos": [
+                    {
+                        "name": "QML.Element",
+                        "value": "auto"
+                    },
+                    {
+                        "name": "QML.Singleton",
+                        "value": "true"
+                    }
+                ],
+                "properties": [
+                    {
+                        "name": "outputFile",
+                        "type": "QString",
+                        "index": 0,
+                        "read": "outputFile"
+                    },
+                    {
+                        "name": "isGenerating",
+                        "type": "bool",
+                        "index": 1,
+                        "read": "isGenerating",
+                        "notify": "isGeneratingChanged"
+                    },
+                    {
+                        "name": "isFetchingVoices",
+                        "type": "bool",
+                        "index": 2,
+                        "read": "isFetchingVoices",
+                        "notify": "isFetchingVoicesChanged"
+                    },
+                    {
+                        "name": "isPlaying",
+                        "type": "bool",
+                        "index": 3,
+                        "read": "isPlaying",
+                        "notify": "isPlayingChanged"
+                    },
+                    {
+                        "name": "hasGeneratedAudio",
+                        "type": "bool",
+                        "index": 4,
+                        "read": "getHasGeneratedAudio",
+                        "write": "setHasGeneratedAudio",
+                        "notify": "hasGeneratedAudioChanged"
+                    },
+                    {
+                        "name": "providersModel",
+                        "type": "ProvidersModel",
+                        "index": 5,
+                        "read": "providersModel"
+                    },
+                    {
+                        "name": "voicesModel",
+                        "type": "VoicesModel",
+                        "index": 6,
+                        "read": "voicesModel"
+                    },
+                    {
+                        "name": "currentProvider",
+                        "type": "QString",
+                        "index": 7,
+                        "read": "getCurrentProvider",
+                        "write": "setCurrentProvider",
+                        "notify": "currentProviderChanged"
+                    }
+                ],
+                "signals": [
+                    {
+                        "access": "public",
+                        "name": "errorOccurred",
+                        "arguments": [
+                            {
+                                "name": "a1",
+                                "type": "QString"
+                            }
+                        ],
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "name": "hasGeneratedAudioChanged",
+                        "arguments": [],
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "name": "isGeneratingChanged",
+                        "arguments": [],
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "name": "isFetchingVoicesChanged",
+                        "arguments": [],
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "name": "isPlayingChanged",
+                        "arguments": [],
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "name": "currentProviderChanged",
+                        "arguments": [],
+                        "returnType": "void"
+                    }
+                ],
+                "slots": [
+                    {
+                        "access": "public",
+                        "name": "getProviderSettings",
+                        "arguments": [
+                            {
+                                "name": "a1",
+                                "type": "QString"
+                            }
+                        ],
+                        "returnType": "list"
+                    },
+                    {
+                        "access": "public",
+                        "name": "fetchVoices",
+                        "arguments": [],
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "name": "generateAudio",
+                        "arguments": [
+                            {
+                                "name": "a1",
+                                "type": "QString"
+                            },
+                            {
+                                "name": "a2",
+                                "type": "QString"
+                            },
+                            {
+                                "name": "a3",
+                                "type": "QString"
+                            }
+                        ],
+                        "returnType": "bool"
+                    },
+                    {
+                        "access": "public",
+                        "name": "playAudio",
+                        "arguments": [
+                            {
+                                "name": "a1",
+                                "type": "QString"
+                            }
+                        ],
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "name": "stopAudio",
+                        "arguments": [],
+                        "returnType": "void"
+                    }
+                ]
+            }
+        ],
+        "outputRevision": 68,
+        "QML_IMPORT_NAME": "PowerNarrator",
+        "QML_IMPORT_MAJOR_VERSION": 1,
+        "QML_IMPORT_MINOR_VERSION": 0,
+        "QT_MODULES": [
+            "QtCore",
+            "QtMultimedia",
+            "QtQml"
+        ],
+        "inputFile": "/Users/proglab/Documents/python-xml/src/power_narrator/ui/qml_modules/PowerNarrator/tts_manager.py"
+    },
+    {
+        "classes": [
+            {
+                "className": "PPTXManager",
+                "qualifiedClassName": "PPTXManager",
+                "object": true,
+                "superClasses": [
+                    {
+                        "access": "public",
+                        "name": "QObject"
+                    }
+                ],
+                "classInfos": [
+                    {
+                        "name": "QML.Element",
+                        "value": "auto"
+                    },
+                    {
+                        "name": "QML.Singleton",
+                        "value": "true"
+                    }
+                ],
+                "properties": [
+                    {
+                        "name": "fileLoaded",
+                        "type": "bool",
+                        "index": 0,
+                        "read": "fileLoaded",
+                        "notify": "fileLoadedChanged"
+                    },
+                    {
+                        "name": "slidesModel",
+                        "type": "QObject",
+                        "index": 1,
+                        "read": "slidesModel"
+                    },
+                    {
+                        "name": "currentSlideIndex",
+                        "type": "int",
+                        "index": 2,
+                        "read": "getCurrentSlideIndex",
+                        "write": "setCurrentSlideIndex",
+                        "notify": "currentSlideIndexChanged"
+                    },
+                    {
+                        "name": "currentSlideNotes",
+                        "type": "QString",
+                        "index": 3,
+                        "read": "getCurrentSlideNotes",
+                        "write": "setCurrentSlideNotes",
+                        "notify": "currentSlideNotesChanged"
+                    },
+                    {
+                        "name": "currentSlideHasEmbeddedAudio",
+                        "type": "bool",
+                        "index": 4,
+                        "read": "currentSlideHasEmbeddedAudio",
+                        "notify": "currentSlideHasEmbeddedAudioChanged"
+                    }
+                ],
+                "signals": [
+                    {
+                        "access": "public",
+                        "name": "errorOccurred",
+                        "arguments": [
+                            {
+                                "name": "a1",
+                                "type": "QString"
+                            }
+                        ],
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "name": "fileLoadedChanged",
+                        "arguments": [],
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "name": "currentSlideIndexChanged",
+                        "arguments": [],
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "name": "currentSlideNotesChanged",
+                        "arguments": [],
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "name": "currentSlideHasEmbeddedAudioChanged",
+                        "arguments": [],
+                        "returnType": "void"
+                    }
+                ],
+                "slots": [
+                    {
+                        "access": "public",
+                        "name": "openFile",
+                        "arguments": [
+                            {
+                                "name": "a1",
+                                "type": "QString"
+                            }
+                        ],
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "name": "saveAudioForCurrentSlide",
+                        "arguments": [
+                            {
+                                "name": "a1",
+                                "type": "QString"
+                            }
+                        ],
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "name": "deleteAudioForCurrentSlide",
+                        "arguments": [],
+                        "returnType": "void"
+                    },
+                    {
+                        "access": "public",
+                        "name": "exportTo",
+                        "arguments": [
+                            {
+                                "name": "a1",
+                                "type": "QString"
+                            }
+                        ],
+                        "returnType": "void"
+                    }
+                ]
+            }
+        ],
+        "outputRevision": 68,
+        "QML_IMPORT_NAME": "PowerNarrator",
+        "QML_IMPORT_MAJOR_VERSION": 1,
+        "QML_IMPORT_MINOR_VERSION": 0,
+        "QT_MODULES": [
+            "QtCore",
+            "QtQml"
+        ],
+        "inputFile": "/Users/proglab/Documents/python-xml/src/power_narrator/ui/qml_modules/PowerNarrator/pptx_manager.py"
+    }
+]

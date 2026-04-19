@@ -5,7 +5,7 @@ from pathlib import Path
 
 from utils import (
     BASE_DIR,
-    PKG_DIR,
+    UI_PKG_DIR,
     compile_resources,
     generate_qml_module_artifacts,
 )
@@ -13,13 +13,13 @@ from utils import (
 
 def build_parser() -> argparse.ArgumentParser:
     """Create the command-line argument parser."""
-    parser = argparse.ArgumentParser(description="Build Slide Voice App targets.")
+    parser = argparse.ArgumentParser(description="Build Power Narrator targets.")
     parser.add_argument(
         "target",
         nargs="?",
-        choices=("app", "pptx"),
-        default="app",
-        help="Build target to compile (default: app)",
+        choices=("ui", "pptx"),
+        default="ui",
+        help="Build target to compile (default: ui)",
     )
     return parser
 
@@ -33,29 +33,29 @@ def _build_args(target: str) -> list[str | Path]:
         "-m",
         "nuitka",
         f"--output-dir={BASE_DIR / 'dist'}",
-        "--include-data-files=src/slide_voice_pptx/resources/narration-icon.png=slide_voice_pptx/resources/narration-icon.png",
-        f"--output-filename=slide-voice-{target}",
+        "--include-data-files=src/power_narrator/pptx/resources/narration-icon.png=power_narrator/pptx/resources/narration-icon.png",
+        f"--output-filename=power-narrator-{target}",
     ]
 
-    if target == "app":
+    if target == "ui":
         return [
             *args,
             "--enable-plugin=pyside6",
             "--include-qt-plugins=qml,multimedia",
             "--mode=app",
-            PKG_DIR,
+            UI_PKG_DIR,
         ]
 
     return [
         *args,
         "--mode=onefile",
-        BASE_DIR / "src" / "slide_voice_pptx",
+        BASE_DIR / "src" / "power_narrator" / "cli",
     ]
 
 
-def run_build(target: str = "app"):
+def run_build(target: str = "ui"):
     """Build the selected target using Nuitka."""
-    if target == "app":
+    if target == "ui":
         generate_qml_module_artifacts()
         compile_resources()
 

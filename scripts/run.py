@@ -12,7 +12,7 @@ def run_dev():
     try:
         generate_qml_module_artifacts()
         compile_resources()
-        _ = subprocess.run(["uv", "run", "-m", "slide_voice_app"], check=True)
+        _ = subprocess.run(["uv", "run", "-m", "power_narrator"], check=True)
     except subprocess.CalledProcessError as e:
         print(f"Running application failed: {e}")
         sys.exit(1)

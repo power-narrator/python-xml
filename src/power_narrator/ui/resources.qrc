@@ -1,0 +1,7 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource prefix="/qt/qml">
+    <file alias="Main.qml">ui/Main.qml</file>
+    <file alias="SettingsWindow.qml">ui/SettingsWindow.qml</file>
+    <file>qml_modules/PowerNarrator/qmldir</file>
+</qresource>
+</RCC>

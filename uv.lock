@@ -355,6 +355,35 @@ wheels = [
 ]
 
 [[package]]
+name = "power-narrator"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "google-cloud-texttospeech" },
+    { name = "pyside6" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "nuitka", extra = ["onefile"] },
+    { name = "patchelf", marker = "sys_platform == 'linux'" },
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "google-cloud-texttospeech", specifier = ">=2.34.0" },
+    { name = "pyside6", specifier = ">=6.10.1" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "nuitka", extras = ["onefile"], specifier = ">=4.0" },
+    { name = "patchelf", marker = "sys_platform == 'linux'", specifier = ">=0.17.2.4" },
+    { name = "pytest", specifier = ">=9.0.2" },
+]
+
+[[package]]
 name = "proto-plus"
 version = "1.27.2"
 source = { registry = "https://pypi.org/simple" }
@@ -509,35 +538,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/f5/96/771a6e2b530f725303d16d78a321fa4876b98b4f3615c9851880df8c1a43/shiboken6-6.11.0-cp310-abi3-manylinux_2_39_aarch64.whl", hash = "sha256:a10dc7718104ea2dc15d5b0b96909b77162ce1c76fcc6968e6df692b947a00e9", size = 267456, upload-time = "2026-03-23T12:47:08.689Z" },
     { url = "https://files.pythonhosted.org/packages/72/f7/44c0c42c3f5f29dec457fd46ea0552174bcb8aa75becf03bbd90308ba07b/shiboken6-6.11.0-cp310-abi3-win_amd64.whl", hash = "sha256:483ff78a73c7b3189ca924abc694318084f078bcfeaffa68e32024ff2d025ee1", size = 1222132, upload-time = "2026-03-23T12:47:10.143Z" },
     { url = "https://files.pythonhosted.org/packages/fb/99/6e5ee21db2d6af84bbbd7d871d441dafeb069c6de5667b1aa49891a77c66/shiboken6-6.11.0-cp310-abi3-win_arm64.whl", hash = "sha256:3bd76cf56105ab2d62ecaff630366f11264f69b88d488f10f048da9a065781f4", size = 1783186, upload-time = "2026-03-23T12:47:11.832Z" },
-]
-
-[[package]]
-name = "slide-voice-app"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "google-cloud-texttospeech" },
-    { name = "pyside6" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "nuitka", extra = ["onefile"] },
-    { name = "patchelf", marker = "sys_platform == 'linux'" },
-    { name = "pytest" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "google-cloud-texttospeech", specifier = ">=2.34.0" },
-    { name = "pyside6", specifier = ">=6.10.1" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "nuitka", extras = ["onefile"], specifier = ">=4.0" },
-    { name = "patchelf", marker = "sys_platform == 'linux'", specifier = ">=0.17.2.4" },
-    { name = "pytest", specifier = ">=9.0.2" },
 ]
 
 [[package]]

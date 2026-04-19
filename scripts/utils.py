@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-PKG_DIR = BASE_DIR / "src" / "slide_voice_app"
+UI_PKG_DIR = BASE_DIR / "src" / "power_narrator" / "ui"
 
 
 @dataclass(frozen=True)
@@ -19,7 +19,7 @@ class QmlModuleSpec:
 
 QML_MODULE_SPECS: list[QmlModuleSpec] = [
     QmlModuleSpec(
-        import_name="SlideVoiceApp",
+        import_name="PowerNarrator",
         major_version=1,
         minor_version=0,
         source_files=["models.py", "tts_manager.py", "pptx_manager.py"],
@@ -35,9 +35,9 @@ def compile_resources() -> None:
                 "uv",
                 "run",
                 "pyside6-rcc",
-                str(PKG_DIR / "resources.qrc"),
+                str(UI_PKG_DIR / "resources.qrc"),
                 "-o",
-                str(PKG_DIR / "rc_resources.py"),
+                str(UI_PKG_DIR / "rc_resources.py"),
             ],
             check=True,
         )
@@ -47,7 +47,7 @@ def compile_resources() -> None:
 
 
 def _generate_qml_module_artifacts(spec: QmlModuleSpec) -> None:
-    module_dir = PKG_DIR / "qml_modules" / spec.import_name
+    module_dir = UI_PKG_DIR / "qml_modules" / spec.import_name
 
     for source_file in spec.source_files:
         if not (module_dir / source_file).exists():
