@@ -31,6 +31,7 @@ from .audio_timing import (
     get_or_create_audio_parent,
     get_or_create_command_parent,
     get_or_create_pic_parent,
+    normalize_command_delays,
 )
 
 DEFAULT_ICON_X = 12479915
@@ -330,6 +331,7 @@ def add_audio_to_slide(
     delay = compute_next_delay(cmd_parent)
     cmd_node = create_command_node(spid, delay, cmd_base_id)
     cmd_parent.insert(0, cmd_node)
+    normalize_command_delays(cmd_parent)
 
     audio_ctn_id = get_next_timing_id(slide_root)
     audio_node = create_audio_node(spid, audio_ctn_id)

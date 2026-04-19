@@ -117,23 +117,51 @@ def get_or_create_command_parent(slide_root: ET.Element) -> ET.Element:
         c_tn_seq.set("id", str(max_id + 1))
 
     child_tn_lst = ensure_child(c_tn_seq, f"{{{p}}}childTnLst", {})
-    par = ensure_child(child_tn_lst, f"{{{p}}}par", {})
-    c_tn_inner = ensure_child(par, f"{{{p}}}cTn", {"fill": "hold"})
+    command_parent = None
 
-    if c_tn_inner.get("id") is None:
+    for par in child_tn_lst.findall(f"{{{p}}}par"):
+        c_tn_inner = par.find(f"{{{p}}}cTn")
+
+        if c_tn_inner is None or c_tn_inner.get("fill") != "hold":
+            continue
+
+        st_cond_lst = c_tn_inner.find(f"{{{p}}}stCondLst")
+
+        if st_cond_lst is None:
+            continue
+
+        cond_delay = st_cond_lst.find(f"{{{p}}}cond[@delay='indefinite']")
+        cond_on_begin = st_cond_lst.find(f"{{{p}}}cond[@evt='onBegin'][@delay='0']")
+
+        if cond_delay is None or cond_on_begin is None:
+            continue
+
+        tn = cond_on_begin.find(f"{{{p}}}tn")
+
+        if tn is None or tn.get("val") != c_tn_seq.get("id", ""):
+            continue
+
+        command_parent = ensure_child(c_tn_inner, f"{{{p}}}childTnLst", {})
+        break
+
+    if command_parent is None:
+        par = ET.Element(f"{{{p}}}par")
+        c_tn_inner = ET.SubElement(par, f"{{{p}}}cTn", fill="hold")
+
         max_id = _get_max_ctn_id(slide_root)
         c_tn_inner.set("id", str(max_id + 1))
 
-    st_cond_lst = ensure_child(c_tn_inner, f"{{{p}}}stCondLst", {})
-    ensure_child(st_cond_lst, f"{{{p}}}cond", {"delay": "indefinite"})
-    cond_on_begin = ensure_child(
-        st_cond_lst,
-        f"{{{p}}}cond",
-        {"evt": "onBegin", "delay": "0"},
-    )
-    ensure_child(cond_on_begin, f"{{{p}}}tn", {"val": c_tn_seq.get("id", "")})
-
-    command_parent = ensure_child(c_tn_inner, f"{{{p}}}childTnLst", {})
+        st_cond_lst = ET.SubElement(c_tn_inner, f"{{{p}}}stCondLst")
+        ET.SubElement(st_cond_lst, f"{{{p}}}cond", delay="indefinite")
+        cond_on_begin = ET.SubElement(
+            st_cond_lst,
+            f"{{{p}}}cond",
+            evt="onBegin",
+            delay="0",
+        )
+        ET.SubElement(cond_on_begin, f"{{{p}}}tn", val=c_tn_seq.get("id", ""))
+        command_parent = ET.SubElement(c_tn_inner, f"{{{p}}}childTnLst")
+        child_tn_lst.insert(0, par)
 
     prev_cond_lst = ensure_child(seq, f"{{{p}}}prevCondLst", {})
     cond_prev = ensure_child(
@@ -310,6 +338,20 @@ def create_audio_node(
     ET.SubElement(tgt_el_2, f"{{{p}}}spTgt", spid=str(spid))
 
     return audio
+
+
+def normalize_command_delays(cmd_parent: ET.Element) -> None:
+    """Normalize autoplay command delays to increment by one in DOM order."""
+    delay = 0
+
+    for par in list(cmd_parent):
+        cond = par.find("p:cTn/p:stCondLst/p:cond[@delay]", namespaces=NSMAP)
+
+        if cond is None:
+            continue
+
+        cond.set("delay", str(delay))
+        delay += 1
 
 
 def get_next_shape_id(slide_root: ET.Element) -> int:
