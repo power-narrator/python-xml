@@ -17,7 +17,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "target",
         nargs="?",
-        choices=("ui", "pptx"),
+        choices=("ui", "cli"),
         default="ui",
         help="Build target to compile (default: ui)",
     )
