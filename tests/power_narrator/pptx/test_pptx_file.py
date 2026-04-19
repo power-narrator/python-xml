@@ -1,5 +1,5 @@
-from collections import Counter
 import xml.etree.ElementTree as ET
+from collections import Counter
 from pathlib import Path
 from typing import cast
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -21,14 +21,12 @@ from power_narrator.pptx.xpath import (
     XPATH_CT_DEFAULT_BY_EXTENSION,
     XPATH_CT_OVERRIDE_BY_PATH_NAME,
     XPATH_P_PIC,
-    XPATH_P_TIMING,
     XPATH_PIC_AUDIO_FILE,
     XPATH_PIC_BLIP,
     XPATH_PIC_CNVPR,
     XPATH_PIC_MEDIA,
     XPATH_RELATIONSHIP_WITH_ID,
 )
-
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 SAMPLE_DIRS = [ROOT_DIR, ROOT_DIR / "tests" / "data" / "pptx_samples"]
@@ -267,7 +265,7 @@ def _main_sequence_branch_counts(slide_root: ET.Element) -> dict[str, int]:
 
 def _slide_structure_summary(slide_root: ET.Element) -> dict[str, object]:
     return {
-        "timing": slide_root.find(XPATH_P_TIMING, namespaces=NSMAP) is not None,
+        "timing": slide_root.find("p:timing", namespaces=NSMAP) is not None,
         "audio_signatures": _audio_signatures(slide_root),
         "audio_node_count": len(slide_root.findall(".//p:audio", namespaces=NSMAP)),
         "branch_counts": _main_sequence_branch_counts(slide_root),
@@ -354,7 +352,7 @@ def test_save_audio_for_slide_creates_single_autoplay_audio(tmp_path: Path) -> N
     assert audio_entries[0]["name"] == "intro"
     assert audio_entries[0]["mainseq"] is True
     assert audio_entries[0]["interactive"] is False
-    assert slide_root.find(XPATH_P_TIMING, namespaces=NSMAP) is not None
+    assert slide_root.find("p:timing", namespaces=NSMAP) is not None
     assert len(targets_by_type[REL_TYPE_AUDIO]) == 1
     assert len(targets_by_type[REL_TYPE_MEDIA]) == 1
     assert len(targets_by_type[REL_TYPE_IMAGE]) == 1
@@ -541,7 +539,7 @@ def test_delete_last_automatic_audio_removes_all_audio_artifacts(
     targets_by_type = _relationship_targets_by_type(slide_rels_root)
 
     assert _audio_entries(slide_root) == []
-    assert slide_root.find(XPATH_P_TIMING, namespaces=NSMAP) is None
+    assert slide_root.find("p:timing", namespaces=NSMAP) is None
     assert targets_by_type.get(REL_TYPE_AUDIO, []) == []
     assert targets_by_type.get(REL_TYPE_MEDIA, []) == []
     assert targets_by_type.get(REL_TYPE_IMAGE, []) == []

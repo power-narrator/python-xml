@@ -8,7 +8,6 @@ from ..xpath import (
     XPATH_P_CNVPR_WITH_ID,
     XPATH_P_CTN_WITH_ID,
     XPATH_P_SPTGT_WITH_SPID,
-    XPATH_TIMING_CONDS_WITH_DELAY,
 )
 
 DEFAULT_VOLUME = 80000
@@ -227,7 +226,10 @@ def compute_next_delay(cmd_parent: ET.Element) -> int:
     """
     max_delay = -1
 
-    for cond in cmd_parent.findall(XPATH_TIMING_CONDS_WITH_DELAY, namespaces=NSMAP):
+    for cond in cmd_parent.findall(
+        ".//p:par/p:cTn/p:stCondLst/p:cond[@delay]",
+        namespaces=NSMAP,
+    ):
         delay_value = cond.get("delay", "")
 
         if delay_value.isdigit():

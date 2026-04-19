@@ -36,9 +36,6 @@ from .xpath import (
     XPATH_NOTES_BODY_SHAPES,
     XPATH_NOTES_MASTER_ID_WITH_RID,
     XPATH_P_CNVPR_WITH_ID,
-    XPATH_PARAGRAPH_TEXT,
-    XPATH_SHAPE_PARAGRAPHS,
-    XPATH_TXBODY_PARAGRAPHS,
 )
 
 CONTENT_TYPE_NOTES_MASTER = (
@@ -63,10 +60,10 @@ def _extract_paragraphs(shape_element: ET.Element) -> list[str]:
         List of paragraph strings.
     """
     paragraphs = []
-    p_elements = shape_element.findall(XPATH_SHAPE_PARAGRAPHS, namespaces=NSMAP)
+    p_elements = shape_element.findall(".//a:p", namespaces=NSMAP)
 
     for p_elem in p_elements:
-        text_elements = p_elem.findall(XPATH_PARAGRAPH_TEXT, namespaces=NSMAP)
+        text_elements = p_elem.findall(".//a:t", namespaces=NSMAP)
         para_text = "".join((t.text or "") for t in text_elements)
         paragraphs.append(para_text)
 
@@ -173,7 +170,7 @@ def _set_notes_text(notes_root: ET.Element, text: str) -> None:
     """
     tx_body = _ensure_notes_body_tx_body(notes_root)
 
-    for paragraph in tx_body.findall(XPATH_TXBODY_PARAGRAPHS, namespaces=NSMAP):
+    for paragraph in tx_body.findall("a:p", namespaces=NSMAP):
         tx_body.remove(paragraph)
 
     paragraphs = text.split("\n") if text else [""]

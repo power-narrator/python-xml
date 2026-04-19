@@ -51,3 +51,9 @@ Keep closely related functions near each other, especially when one is only used
 Ancestor tags of the target may be missing.
 
 Assume required sibling tags are present.
+
+## XPath Constants
+
+Keep an XPath as a shared constant only when it is reused across modules, parameterized, represents a non-obvious PPTX structure with domain meaning, or belongs to a small coherent selector family.
+
+Inline an XPath when it is used once, very short and obvious, or tightly coupled to one function's local control flow.

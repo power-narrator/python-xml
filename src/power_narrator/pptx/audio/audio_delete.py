@@ -10,14 +10,8 @@ from ..exceptions import AudioNotFoundError, SlideXmlNotFoundError
 from ..namespaces import NAMESPACE_R, NSMAP, NSMAP_RELS
 from ..paths import resolve_target_path, slide_rels_path, source_path_for_rels_path
 from ..xpath import (
-    XPATH_P_AUDIO,
     XPATH_P_PIC,
-    XPATH_P_SEQ_CHILD,
-    XPATH_P_SEQ_INTERACTIVE_CTN,
-    XPATH_P_SEQ_MAINSEQ_CHILD_TNLST,
     XPATH_P_SPTGT_BY_SPID,
-    XPATH_P_TIMING,
-    XPATH_P_TMROOT_CHILD_TNLST,
     XPATH_PIC_AUDIO_FILE,
     XPATH_PIC_BLIP,
     XPATH_PIC_CNVPR,
@@ -63,12 +57,15 @@ def _remove_empty_timing(slide_root: ET.Element) -> None:
     Args:
         slide_root: Root element of the slide XML.
     """
-    timing = slide_root.find(XPATH_P_TIMING, namespaces=NSMAP)
+    timing = slide_root.find("p:timing", namespaces=NSMAP)
 
     if timing is None:
         return
 
-    tmroot_child_tn_lst = slide_root.find(XPATH_P_TMROOT_CHILD_TNLST, namespaces=NSMAP)
+    tmroot_child_tn_lst = slide_root.find(
+        ".//p:cTn[@nodeType='tmRoot']/p:childTnLst",
+        namespaces=NSMAP,
+    )
 
     if tmroot_child_tn_lst is None or len(tmroot_child_tn_lst) == 0:
         slide_root.remove(timing)
@@ -85,13 +82,19 @@ def _remove_main_sequence_nodes_with_spid_target(
         spid: Shape ID to remove from the main sequence.
     """
     sp_tgt_xpath = XPATH_P_SPTGT_BY_SPID.format(spid=spid)
-    seq_parent = slide_root.find(XPATH_P_TMROOT_CHILD_TNLST, namespaces=NSMAP)
+    seq_parent = slide_root.find(
+        ".//p:cTn[@nodeType='tmRoot']/p:childTnLst",
+        namespaces=NSMAP,
+    )
 
     if seq_parent is None:
         return
 
-    for seq in list(seq_parent.findall(XPATH_P_SEQ_CHILD, namespaces=NSMAP)):
-        child_tn_lst = seq.find(XPATH_P_SEQ_MAINSEQ_CHILD_TNLST, namespaces=NSMAP)
+    for seq in list(seq_parent.findall("p:seq", namespaces=NSMAP)):
+        child_tn_lst = seq.find(
+            "p:cTn[@nodeType='mainSeq']/p:childTnLst",
+            namespaces=NSMAP,
+        )
 
         if child_tn_lst is None:
             continue
@@ -141,13 +144,16 @@ def _remove_interactive_sequences_with_spid_target(
         spid: Shape ID to remove from interactive sequences.
     """
     sp_tgt_xpath = XPATH_P_SPTGT_BY_SPID.format(spid=spid)
-    seq_parent = slide_root.find(XPATH_P_TMROOT_CHILD_TNLST, namespaces=NSMAP)
+    seq_parent = slide_root.find(
+        ".//p:cTn[@nodeType='tmRoot']/p:childTnLst",
+        namespaces=NSMAP,
+    )
 
     if seq_parent is None:
         return
 
-    for seq in list(seq_parent.findall(XPATH_P_SEQ_CHILD, namespaces=NSMAP)):
-        c_tn = seq.find(XPATH_P_SEQ_INTERACTIVE_CTN, namespaces=NSMAP)
+    for seq in list(seq_parent.findall("p:seq", namespaces=NSMAP)):
+        c_tn = seq.find("p:cTn[@nodeType='interactiveSeq']", namespaces=NSMAP)
 
         if c_tn is None or c_tn.find(sp_tgt_xpath, namespaces=NSMAP) is None:
             continue
@@ -166,12 +172,15 @@ def _remove_audio_nodes_with_spid_target(
         spid: Shape ID to remove from audio timing nodes.
     """
     sp_tgt_xpath = XPATH_P_SPTGT_BY_SPID.format(spid=spid)
-    audio_parent = slide_root.find(XPATH_P_TMROOT_CHILD_TNLST, namespaces=NSMAP)
+    audio_parent = slide_root.find(
+        ".//p:cTn[@nodeType='tmRoot']/p:childTnLst",
+        namespaces=NSMAP,
+    )
 
     if audio_parent is None:
         return
 
-    for audio in list(audio_parent.findall(XPATH_P_AUDIO, namespaces=NSMAP)):
+    for audio in list(audio_parent.findall(".//p:audio", namespaces=NSMAP)):
         if audio.find(sp_tgt_xpath, namespaces=NSMAP) is None:
             continue
 
