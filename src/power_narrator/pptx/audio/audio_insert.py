@@ -7,6 +7,8 @@ import xml.etree.ElementTree as ET
 from importlib.resources import files
 from pathlib import Path
 
+from mutagen.mp3 import MP3
+
 from ..content_types import ensure_content_type_defaults
 from ..exceptions import SlideXmlNotFoundError
 from ..namespaces import (
@@ -23,7 +25,6 @@ from ..namespaces import (
 from ..paths import slide_rels_path
 from ..rels import add_relationship, find_relationship_by_type_and_target
 from .audio_timing import (
-    compute_next_delay,
     create_audio_node,
     create_command_node,
     get_next_shape_id,
@@ -45,6 +46,23 @@ AUDIO_ICON_BYTES = (
     .read_bytes()
 )
 AUDIO_ICON_HASH = hashlib.sha256(AUDIO_ICON_BYTES).hexdigest()
+
+
+def get_mp3_duration_ms(mp3_path: Path) -> int:
+    """Return MP3 duration in whole milliseconds.
+
+    Args:
+        mp3_path: Path to the MP3 file.
+
+    Returns:
+        Duration rounded to the nearest millisecond.
+    """
+    info = MP3(mp3_path).info
+
+    if info is None or not hasattr(info, "length"):
+        raise ValueError(f"Unable to read MP3 duration: {mp3_path}")
+
+    return round(info.length * 1000)
 
 
 def _find_media_files(media_dir: Path, prefix: str, ext: str) -> list[str]:
@@ -233,6 +251,7 @@ def add_audio_to_slide(
     if not mp3_path.exists():
         raise FileNotFoundError(f"MP3 file not found: {mp3_path}")
 
+    duration_ms = get_mp3_duration_ms(mp3_path)
     mp3_data = mp3_path.read_bytes()
     mp3_hash = hashlib.sha256(mp3_data).hexdigest()
 
@@ -330,8 +349,12 @@ def add_audio_to_slide(
     audio_parent = get_or_create_audio_parent(slide_root)
 
     cmd_base_id = get_next_timing_id(slide_root)
-    delay = compute_next_delay(cmd_parent)
-    cmd_node = create_command_node(spid, delay, cmd_base_id)
+    cmd_node = create_command_node(
+        spid=spid,
+        delay=0,
+        duration_ms=duration_ms,
+        base_id=cmd_base_id,
+    )
     cmd_parent.insert(0, cmd_node)
     normalize_command_delays(cmd_parent)
 

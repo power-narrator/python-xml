@@ -7,7 +7,7 @@ from power_narrator.pptx.rels import get_relationship_id_target_map
 
 from ..content_types import remove_content_type_default_if_unused
 from ..exceptions import AudioNotFoundError, SlideXmlNotFoundError
-from ..namespaces import NAMESPACE_R, NSMAP, NSMAP_RELS
+from ..namespaces import NSMAP, NSMAP_RELS
 from ..paths import resolve_target_path, slide_rels_path, source_path_for_rels_path
 from ..xpath import (
     XPATH_P_PIC,
@@ -19,6 +19,10 @@ from ..xpath import (
     XPATH_RELATIONSHIP_BY_ID,
 )
 from .audio_read import load_slide_audio
+from .audio_timing import get_automatic_command_parent, normalize_command_delays
+
+TMROOT_CHILD_TN_LST_XPATH = ".//p:cTn[@nodeType='tmRoot']/p:childTnLst"
+MAINSEQ_CHILD_TN_LST_XPATH = "p:cTn[@nodeType='mainSeq']/p:childTnLst"
 
 
 def _slide_uses_relationship_id(slide_root: ET.Element, rid: str) -> bool:
@@ -31,24 +35,23 @@ def _slide_uses_relationship_id(slide_root: ET.Element, rid: str) -> bool:
     Returns:
         True when the relationship ID is still referenced in the slide XML.
     """
-    rel_attr = f"{{{NAMESPACE_R}}}link"
-    embed_attr = f"{{{NAMESPACE_R}}}embed"
-
-    for pic in slide_root.findall(XPATH_P_PIC, namespaces=NSMAP):
-        audio_file = pic.find(XPATH_PIC_AUDIO_FILE, namespaces=NSMAP)
-        media = pic.find(XPATH_PIC_MEDIA, namespaces=NSMAP)
-        blip = pic.find(XPATH_PIC_BLIP, namespaces=NSMAP)
-
-        if audio_file is not None and audio_file.get(rel_attr) == rid:
-            return True
-
-        if media is not None and media.get(embed_attr) == rid:
-            return True
-
-        if blip is not None and blip.get(embed_attr) == rid:
-            return True
-
-    return False
+    return (
+        slide_root.find(
+            f"{XPATH_P_PIC}/{XPATH_PIC_AUDIO_FILE}[@r:link='{rid}']",
+            namespaces=NSMAP,
+        )
+        is not None
+        or slide_root.find(
+            f"{XPATH_P_PIC}/{XPATH_PIC_MEDIA}[@r:embed='{rid}']",
+            namespaces=NSMAP,
+        )
+        is not None
+        or slide_root.find(
+            f"{XPATH_P_PIC}/{XPATH_PIC_BLIP}[@r:embed='{rid}']",
+            namespaces=NSMAP,
+        )
+        is not None
+    )
 
 
 def _remove_empty_timing(slide_root: ET.Element) -> None:
@@ -62,10 +65,7 @@ def _remove_empty_timing(slide_root: ET.Element) -> None:
     if timing is None:
         return
 
-    tmroot_child_tn_lst = slide_root.find(
-        ".//p:cTn[@nodeType='tmRoot']/p:childTnLst",
-        namespaces=NSMAP,
-    )
+    tmroot_child_tn_lst = slide_root.find(TMROOT_CHILD_TN_LST_XPATH, namespaces=NSMAP)
 
     if tmroot_child_tn_lst is None or len(tmroot_child_tn_lst) == 0:
         slide_root.remove(timing)
@@ -82,19 +82,13 @@ def _remove_main_sequence_nodes_with_spid_target(
         spid: Shape ID to remove from the main sequence.
     """
     sp_tgt_xpath = XPATH_P_SPTGT_BY_SPID.format(spid=spid)
-    seq_parent = slide_root.find(
-        ".//p:cTn[@nodeType='tmRoot']/p:childTnLst",
-        namespaces=NSMAP,
-    )
+    seq_parent = slide_root.find(TMROOT_CHILD_TN_LST_XPATH, namespaces=NSMAP)
 
     if seq_parent is None:
         return
 
     for seq in list(seq_parent.findall("p:seq", namespaces=NSMAP)):
-        child_tn_lst = seq.find(
-            "p:cTn[@nodeType='mainSeq']/p:childTnLst",
-            namespaces=NSMAP,
-        )
+        child_tn_lst = seq.find(MAINSEQ_CHILD_TN_LST_XPATH, namespaces=NSMAP)
 
         if child_tn_lst is None:
             continue
@@ -120,14 +114,15 @@ def _remove_main_sequence_nodes_with_spid_target(
                 nested_child_tn_lst.remove(nested_par)
                 removed_nested_par = True
 
-            if removed_nested_par and nested_child_tn_lst.findall(
-                "p:par", namespaces=NSMAP
+            if (
+                removed_nested_par
+                and nested_child_tn_lst.find("p:par", namespaces=NSMAP) is not None
             ):
                 continue
 
             child_tn_lst.remove(par)
 
-        if child_tn_lst.findall("p:par", namespaces=NSMAP):
+        if child_tn_lst.find("p:par", namespaces=NSMAP) is not None:
             continue
 
         seq_parent.remove(seq)
@@ -144,10 +139,7 @@ def _remove_interactive_sequences_with_spid_target(
         spid: Shape ID to remove from interactive sequences.
     """
     sp_tgt_xpath = XPATH_P_SPTGT_BY_SPID.format(spid=spid)
-    seq_parent = slide_root.find(
-        ".//p:cTn[@nodeType='tmRoot']/p:childTnLst",
-        namespaces=NSMAP,
-    )
+    seq_parent = slide_root.find(TMROOT_CHILD_TN_LST_XPATH, namespaces=NSMAP)
 
     if seq_parent is None:
         return
@@ -172,10 +164,8 @@ def _remove_audio_nodes_with_spid_target(
         spid: Shape ID to remove from audio timing nodes.
     """
     sp_tgt_xpath = XPATH_P_SPTGT_BY_SPID.format(spid=spid)
-    audio_parent = slide_root.find(
-        ".//p:cTn[@nodeType='tmRoot']/p:childTnLst",
-        namespaces=NSMAP,
-    )
+    sp_tgt_xpath = XPATH_P_SPTGT_BY_SPID.format(spid=spid)
+    audio_parent = slide_root.find(TMROOT_CHILD_TN_LST_XPATH, namespaces=NSMAP)
 
     if audio_parent is None:
         return
@@ -257,6 +247,11 @@ def delete_slide_audio(work_dir: Path, slide_path: str, name: str) -> None:
     _remove_main_sequence_nodes_with_spid_target(slide_root, spid)
     _remove_interactive_sequences_with_spid_target(slide_root, spid)
     _remove_audio_nodes_with_spid_target(slide_root, spid)
+    command_parent = get_automatic_command_parent(slide_root)
+
+    if command_parent is not None:
+        normalize_command_delays(command_parent)
+
     _remove_empty_timing(slide_root)
 
     slide_file.write_bytes(

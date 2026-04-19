@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11, <3.14"
 dependencies = [
     "google-cloud-texttospeech>=2.34.0",
+    "mutagen>=1.47.0",
     "pyside6>=6.10.1",
 ]
 

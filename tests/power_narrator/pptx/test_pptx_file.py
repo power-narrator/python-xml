@@ -5,6 +5,7 @@ from typing import cast
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
+from mutagen.mp3 import MP3
 
 from power_narrator.pptx.namespaces import (
     NSMAP,
@@ -54,10 +55,26 @@ def _fixture_pptx_path(tmp_path: Path, sample_name: str) -> Path:
     return pptx_path
 
 
-def _write_mp3(tmp_path: Path, name: str, payload: bytes) -> Path:
+def _write_mp3_from_sample(
+    tmp_path: Path,
+    name: str,
+    sample_name: str,
+    media_name: str,
+) -> Path:
     mp3_path = tmp_path / name
-    mp3_path.write_bytes(payload)
+    mp3_path.write_bytes(
+        (_sample_dir(sample_name) / "ppt" / "media" / media_name).read_bytes()
+    )
     return mp3_path
+
+
+def _mp3_duration_ms(mp3_path: Path) -> int:
+    info = MP3(mp3_path).info
+
+    if info is None or not hasattr(info, "length"):
+        raise ValueError(f"Unable to read MP3 duration: {mp3_path}")
+
+    return round(info.length * 1000)
 
 
 def _read_zip_xml(pptx_path: Path, member: str) -> ET.Element:
@@ -215,6 +232,64 @@ def _audio_signatures(slide_root: ET.Element) -> list[tuple[str, str]]:
     )
 
 
+def _automatic_command_timings(slide_root: ET.Element) -> list[dict[str, int]]:
+    for par in slide_root.findall(
+        ".//p:cTn[@nodeType='mainSeq']/p:childTnLst/p:par",
+        namespaces=NSMAP,
+    ):
+        if (
+            par.find(
+                "p:cTn/p:stCondLst/p:cond[@evt='onBegin'][@delay='0']",
+                namespaces=NSMAP,
+            )
+            is None
+        ):
+            continue
+
+        command_parent = par.find("p:cTn/p:childTnLst", namespaces=NSMAP)
+
+        if command_parent is None:
+            return []
+
+        timings: list[dict[str, int]] = []
+
+        for command_par in command_parent.findall("p:par", namespaces=NSMAP):
+            delay_node = command_par.find(
+                "p:cTn/p:stCondLst/p:cond[@delay]",
+                namespaces=NSMAP,
+            )
+            duration_node = command_par.find(
+                ".//p:cmd/p:cBhvr/p:cTn",
+                namespaces=NSMAP,
+            )
+            sp_tgt = command_par.find(
+                ".//p:cmd/p:cBhvr/p:tgtEl/p:spTgt",
+                namespaces=NSMAP,
+            )
+
+            if delay_node is None or duration_node is None or sp_tgt is None:
+                continue
+
+            delay = delay_node.get("delay", "")
+            duration = duration_node.get("dur", "")
+            spid = sp_tgt.get("spid", "")
+
+            if not delay.isdigit() or not duration.isdigit() or not spid.isdigit():
+                continue
+
+            timings.append(
+                {
+                    "spid": int(spid),
+                    "delay": int(delay),
+                    "dur": int(duration),
+                }
+            )
+
+        return timings
+
+    return []
+
+
 def _relationship_type_counts(rels_root: ET.Element) -> dict[str, int]:
     return {
         rel_type: len(targets)
@@ -335,7 +410,12 @@ def test_set_slide_notes_creates_notes_parts_and_updates_metadata(
 def test_save_audio_for_slide_creates_single_autoplay_audio(tmp_path: Path) -> None:
     input_path = _fixture_pptx_path(tmp_path, "base")
     output_path = tmp_path / "one-audio.pptx"
-    mp3_path = _write_mp3(tmp_path, "intro.mp3", b"intro-audio")
+    mp3_path = _write_mp3_from_sample(
+        tmp_path,
+        "intro.mp3",
+        "1-auto-audio",
+        "media1.mp3",
+    )
 
     with PptxFile.open(input_path) as pptx:
         pptx.save_audio_for_slide(0, mp3_path)
@@ -346,6 +426,7 @@ def test_save_audio_for_slide_creates_single_autoplay_audio(tmp_path: Path) -> N
     slide_rels_root = _read_zip_xml(output_path, "ppt/slides/_rels/slide1.xml.rels")
     content_types_root = _read_zip_xml(output_path, "[Content_Types].xml")
     audio_entries = _audio_entries(slide_root)
+    timings = _automatic_command_timings(slide_root)
     targets_by_type = _relationship_targets_by_type(slide_rels_root)
 
     assert len(audio_entries) == 1
@@ -353,6 +434,7 @@ def test_save_audio_for_slide_creates_single_autoplay_audio(tmp_path: Path) -> N
     assert audio_entries[0]["mainseq"] is True
     assert audio_entries[0]["interactive"] is False
     assert slide_root.find("p:timing", namespaces=NSMAP) is not None
+    assert timings == [{"spid": 4, "delay": 0, "dur": _mp3_duration_ms(mp3_path)}]
     assert len(targets_by_type[REL_TYPE_AUDIO]) == 1
     assert len(targets_by_type[REL_TYPE_MEDIA]) == 1
     assert len(targets_by_type[REL_TYPE_IMAGE]) == 1
@@ -367,8 +449,18 @@ def test_save_audio_for_slide_creates_single_autoplay_audio(tmp_path: Path) -> N
 def test_save_audio_for_slide_twice_keeps_two_autoplay_entries(tmp_path: Path) -> None:
     input_path = _fixture_pptx_path(tmp_path, "base")
     output_path = tmp_path / "two-audio.pptx"
-    first_mp3 = _write_mp3(tmp_path, "intro.mp3", b"intro-audio")
-    second_mp3 = _write_mp3(tmp_path, "outro.mp3", b"outro-audio")
+    first_mp3 = _write_mp3_from_sample(
+        tmp_path,
+        "intro.mp3",
+        "1-auto-audio",
+        "media1.mp3",
+    )
+    second_mp3 = _write_mp3_from_sample(
+        tmp_path,
+        "outro.mp3",
+        "1-manual-and-auto-audio",
+        "media2.mp3",
+    )
 
     with PptxFile.open(input_path) as pptx:
         pptx.save_audio_for_slide(0, first_mp3)
@@ -379,11 +471,22 @@ def test_save_audio_for_slide_twice_keeps_two_autoplay_entries(tmp_path: Path) -
     slide_root = _read_zip_xml(output_path, "ppt/slides/slide1.xml")
     slide_rels_root = _read_zip_xml(output_path, "ppt/slides/_rels/slide1.xml.rels")
     audio_entries = _audio_entries(slide_root)
+    audio_names_by_spid = {
+        cast(str, entry["spid"]): cast(str, entry["name"]) for entry in audio_entries
+    }
+    timings = _automatic_command_timings(slide_root)
     targets_by_type = _relationship_targets_by_type(slide_rels_root)
 
     assert [entry["name"] for entry in audio_entries] == ["intro", "outro"]
     assert all(entry["mainseq"] is True for entry in audio_entries)
     assert all(entry["interactive"] is False for entry in audio_entries)
+    assert [
+        (audio_names_by_spid[str(item["spid"])], item["delay"], item["dur"])
+        for item in timings
+    ] == [
+        ("outro", 0, _mp3_duration_ms(second_mp3)),
+        ("intro", _mp3_duration_ms(second_mp3), _mp3_duration_ms(first_mp3)),
+    ]
     assert len(targets_by_type[REL_TYPE_AUDIO]) == 2
     assert len(targets_by_type[REL_TYPE_MEDIA]) == 2
     assert len(targets_by_type[REL_TYPE_IMAGE]) == 1
@@ -483,7 +586,6 @@ def test_delete_manual_from_one_manual_and_auto_audio_keeps_automatic(
 
     slide_root = _read_zip_xml(output_path, "ppt/slides/slide1.xml")
     slide_rels_root = _read_zip_xml(output_path, "ppt/slides/_rels/slide1.xml.rels")
-    audio_entries = _audio_entries(slide_root)
     targets_by_type = _relationship_targets_by_type(slide_rels_root)
 
     assert _audio_signatures(slide_root) == [("ppt_audio_1", "auto")]
@@ -509,7 +611,6 @@ def test_delete_automatic_from_one_manual_and_auto_audio_keeps_manual(
 
     slide_root = _read_zip_xml(output_path, "ppt/slides/slide1.xml")
     slide_rels_root = _read_zip_xml(output_path, "ppt/slides/_rels/slide1.xml.rels")
-    audio_entries = _audio_entries(slide_root)
     targets_by_type = _relationship_targets_by_type(slide_rels_root)
 
     assert _audio_signatures(slide_root) == [("ppt_audio_2", "click")]
@@ -592,7 +693,12 @@ def test_save_audio_for_slide_adds_default_auto_to_mixed_timing_slide(
 ) -> None:
     input_path = _fixture_pptx_path(tmp_path, "1-auto-click-interactive-audio")
     output_path = tmp_path / "mixed-plus-auto.pptx"
-    mp3_path = _write_mp3(tmp_path, "narration.mp3", b"new-auto")
+    mp3_path = _write_mp3_from_sample(
+        tmp_path,
+        "narration.mp3",
+        "1-manual-and-auto-audio",
+        "media2.mp3",
+    )
     input_slide_rels_root = _read_zip_xml(
         input_path, "ppt/slides/_rels/slide1.xml.rels"
     )
@@ -611,10 +717,21 @@ def test_save_audio_for_slide_adds_default_auto_to_mixed_timing_slide(
 
     slide_root = _read_zip_xml(output_path, "ppt/slides/slide1.xml")
     slide_rels_root = _read_zip_xml(output_path, "ppt/slides/_rels/slide1.xml.rels")
+    audio_names_by_spid = {
+        cast(str, entry["spid"]): cast(str, entry["name"])
+        for entry in _audio_entries(slide_root)
+    }
 
     assert Counter(mode for _, mode in _audio_signatures(slide_root)) == Counter(
         {"auto": 2, "click": 1, "interactive": 1}
     )
+    assert [
+        (audio_names_by_spid[str(item["spid"])], item["delay"], item["dur"])
+        for item in _automatic_command_timings(slide_root)
+    ] == [
+        ("narration", 0, _mp3_duration_ms(mp3_path)),
+        ("ppt_audio_1", _mp3_duration_ms(mp3_path), 1224),
+    ]
     assert _relationship_type_counts(slide_rels_root)[REL_TYPE_AUDIO] == 4
     assert _relationship_type_counts(slide_rels_root)[REL_TYPE_MEDIA] == 4
     assert _relationship_type_counts(slide_rels_root)[REL_TYPE_IMAGE] in {
@@ -641,8 +758,12 @@ def test_save_audio_for_slide_updates_existing_audio_without_changing_structure(
 ) -> None:
     input_path = _fixture_pptx_path(tmp_path, "1-auto-click-interactive-audio")
     output_path = tmp_path / f"updated-{audio_name}.pptx"
-    payload = f"updated-{audio_name}".encode()
-    mp3_path = _write_mp3(tmp_path, f"{audio_name}.mp3", payload)
+    mp3_path = _write_mp3_from_sample(
+        tmp_path,
+        f"{audio_name}.mp3",
+        "1-manual-and-auto-audio",
+        "media2.mp3",
+    )
 
     with PptxFile.open(input_path) as pptx:
         pptx.save_audio_for_slide(0, mp3_path)
@@ -664,7 +785,38 @@ def test_save_audio_for_slide_updates_existing_audio_without_changing_structure(
     assert _relationship_type_counts(slide_rels_root)[REL_TYPE_AUDIO] == 3
     assert _relationship_type_counts(slide_rels_root)[REL_TYPE_MEDIA] == 3
     assert _relationship_type_counts(slide_rels_root)[REL_TYPE_IMAGE] == 1
-    assert _zip_member_bytes(output_path, media_member) == payload
+    assert _zip_member_bytes(output_path, media_member) == mp3_path.read_bytes()
+
+
+def test_save_audio_for_slide_updates_existing_auto_duration_and_reflows_following_auto(
+    tmp_path: Path,
+) -> None:
+    input_path = _fixture_pptx_path(tmp_path, "2-auto-click-interactive-audio")
+    output_path = tmp_path / "updated-auto-timing.pptx"
+    mp3_path = _write_mp3_from_sample(
+        tmp_path,
+        "ppt_audio_1.mp3",
+        "1-manual-and-auto-audio",
+        "media2.mp3",
+    )
+
+    with PptxFile.open(input_path) as pptx:
+        pptx.save_audio_for_slide(0, mp3_path)
+        pptx.export_to(output_path)
+
+    slide_root = _read_zip_xml(output_path, "ppt/slides/slide1.xml")
+    audio_names_by_spid = {
+        cast(str, entry["spid"]): cast(str, entry["name"])
+        for entry in _audio_entries(slide_root)
+    }
+
+    assert [
+        (audio_names_by_spid[str(item["spid"])], item["delay"], item["dur"])
+        for item in _automatic_command_timings(slide_root)
+    ] == [
+        ("ppt_audio_1", 0, _mp3_duration_ms(mp3_path)),
+        ("ppt_audio_2", _mp3_duration_ms(mp3_path), 1368),
+    ]
 
 
 @pytest.mark.parametrize(

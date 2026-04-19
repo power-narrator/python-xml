@@ -11,6 +11,12 @@ from ..xpath import (
 )
 
 DEFAULT_VOLUME = 80000
+AUTOMATIC_COMMAND_CTN_XPATH = (
+    "p:cTn/p:childTnLst/p:par/p:cTn/p:childTnLst/p:cmd/p:cBhvr/p:cTn"
+)
+AUTOMATIC_COMMAND_TARGET_XPATH = (
+    "p:cTn/p:childTnLst/p:par/p:cTn/p:childTnLst/p:cmd/p:cBhvr/p:tgtEl/p:spTgt"
+)
 
 
 def _get_max_shape_id(slide_root: ET.Element) -> int:
@@ -85,6 +91,41 @@ def _get_common_timing_prefix(slide_root: ET.Element) -> ET.Element:
     return ensure_child(c_tn_root, f"{{{p}}}childTnLst", {})
 
 
+def get_automatic_command_parent(slide_root: ET.Element) -> ET.Element | None:
+    """Return the existing automatic command childTnLst if present.
+
+    Args:
+        slide_root: Root element of the slide XML.
+
+    Returns:
+        The nested ``childTnLst`` for automatic commands, or ``None``.
+    """
+    for c_tn in slide_root.findall(
+        ".//p:seq/p:cTn/p:childTnLst/p:par/p:cTn",
+        namespaces=NSMAP,
+    ):
+        st_cond_lst = c_tn.find("p:stCondLst", namespaces=NSMAP)
+
+        if st_cond_lst is None:
+            continue
+
+        if st_cond_lst.find("p:cond[@delay='indefinite']", namespaces=NSMAP) is None:
+            continue
+
+        if (
+            st_cond_lst.find(
+                "p:cond[@evt='onBegin'][@delay='0']",
+                namespaces=NSMAP,
+            )
+            is None
+        ):
+            continue
+
+        return c_tn.find("p:childTnLst", namespaces=NSMAP)
+
+    return None
+
+
 def get_or_create_command_parent(slide_root: ET.Element) -> ET.Element:
     """Find or create the childTnLst where command nodes should be appended.
 
@@ -118,10 +159,8 @@ def get_or_create_command_parent(slide_root: ET.Element) -> ET.Element:
     child_tn_lst = ensure_child(c_tn_seq, f"{{{p}}}childTnLst", {})
     command_parent = None
 
-    for par in child_tn_lst.findall(f"{{{p}}}par"):
-        c_tn_inner = par.find(f"{{{p}}}cTn")
-
-        if c_tn_inner is None or c_tn_inner.get("fill") != "hold":
+    for c_tn_inner in child_tn_lst.findall(f"{{{p}}}par/{{{p}}}cTn"):
+        if c_tn_inner.get("fill") != "hold":
             continue
 
         st_cond_lst = c_tn_inner.find(f"{{{p}}}stCondLst")
@@ -213,37 +252,18 @@ def get_or_create_pic_parent(slide_root: ET.Element) -> ET.Element:
     return ensure_child(c_sld, f"{{{p}}}spTree", {})
 
 
-def compute_next_delay(cmd_parent: ET.Element) -> int:
-    """Compute delay for new command based on existing playFrom commands.
-
-    Delay increments by 1 for each existing command.
-
-    Args:
-        cmd_parent: The childTnLst element containing command nodes.
-
-    Returns:
-        Delay for the next audio command.
-    """
-    max_delay = -1
-
-    for cond in cmd_parent.findall(
-        ".//p:par/p:cTn/p:stCondLst/p:cond[@delay]",
-        namespaces=NSMAP,
-    ):
-        delay_value = cond.get("delay", "")
-
-        if delay_value.isdigit():
-            max_delay = max(max_delay, int(delay_value))
-
-    return max_delay + 1
-
-
-def create_command_node(spid: int, delay: int, base_id: int) -> ET.Element:
+def create_command_node(
+    spid: int,
+    delay: int,
+    duration_ms: int,
+    base_id: int,
+) -> ET.Element:
     """Create a p:par command node for autoplay.
 
     Args:
         spid: Shape ID to target with the command.
-        delay: The index of command within its parent.
+        delay: Delay before this automatic command starts.
+        duration_ms: Duration of the media in milliseconds.
         base_id: Starting ID for timing node IDs.
 
     Returns:
@@ -286,7 +306,7 @@ def create_command_node(spid: int, delay: int, base_id: int) -> ET.Element:
         c_bhvr,
         f"{{{p}}}cTn",
         id=str(base_id + 2),
-        dur="1",
+        dur=str(duration_ms),
         fill="hold",
     )
     tgt_el = ET.SubElement(c_bhvr, f"{{{p}}}tgtEl")
@@ -343,17 +363,65 @@ def create_audio_node(
 
 
 def normalize_command_delays(cmd_parent: ET.Element) -> None:
-    """Normalize autoplay command delays to increment by one in DOM order."""
+    """Normalize automatic command delays to cumulative durations in DOM order."""
     delay = 0
 
-    for par in list(cmd_parent):
+    for par in cmd_parent.findall("p:par", namespaces=NSMAP):
         cond = par.find("p:cTn/p:stCondLst/p:cond[@delay]", namespaces=NSMAP)
 
         if cond is None:
             continue
 
+        duration_node = par.find(AUTOMATIC_COMMAND_CTN_XPATH, namespaces=NSMAP)
+        duration_value = (
+            duration_node.get("dur", "") if duration_node is not None else ""
+        )
+
         cond.set("delay", str(delay))
-        delay += 1
+        if duration_value.isdigit():
+            delay += int(duration_value)
+
+
+def update_automatic_command_duration(
+    slide_root: ET.Element,
+    spid: int,
+    duration_ms: int,
+) -> bool:
+    """Update one automatic command duration and reflow later delays.
+
+    Args:
+        slide_root: Root element of the slide XML.
+        spid: Shape ID targeted by the command.
+        duration_ms: Duration of the media in milliseconds.
+
+    Returns:
+        ``True`` when an automatic command was found and updated.
+    """
+    command_parent = get_automatic_command_parent(slide_root)
+
+    if command_parent is None:
+        return False
+
+    for par in command_parent.findall("p:par", namespaces=NSMAP):
+        if (
+            par.find(
+                f"{AUTOMATIC_COMMAND_TARGET_XPATH}[@spid='{spid}']",
+                namespaces=NSMAP,
+            )
+            is None
+        ):
+            continue
+
+        duration_node = par.find(AUTOMATIC_COMMAND_CTN_XPATH, namespaces=NSMAP)
+
+        if duration_node is None:
+            return False
+
+        duration_node.set("dur", str(duration_ms))
+        normalize_command_delays(command_parent)
+        return True
+
+    return False
 
 
 def get_next_shape_id(slide_root: ET.Element) -> int:
