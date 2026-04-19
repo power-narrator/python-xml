@@ -18,4 +18,6 @@ dev = [
     "nuitka[onefile]>=4.0",
     "patchelf>=0.17.2.4 ; sys_platform == 'linux'",
     "pytest>=9.0.2",
+    "ruff>=0.15.11",
+    "ty>=0.0.31",
 ]
