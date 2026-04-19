@@ -1,7 +1,10 @@
+from collections import Counter
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import cast
 from zipfile import ZIP_DEFLATED, ZipFile
+
+import pytest
 
 from power_narrator.pptx.namespaces import (
     NSMAP,
@@ -12,6 +15,7 @@ from power_narrator.pptx.namespaces import (
     REL_TYPE_MEDIA,
     REL_TYPE_NOTES_SLIDE,
 )
+from power_narrator.pptx.paths import resolve_target_path
 from power_narrator.pptx.pptx_file import PptxFile
 from power_narrator.pptx.xpath import (
     XPATH_CT_DEFAULT_BY_EXTENSION,
@@ -26,11 +30,22 @@ from power_narrator.pptx.xpath import (
 )
 
 
-SAMPLES_DIR = Path(__file__).resolve().parents[2] / "data" / "pptx_samples"
+ROOT_DIR = Path(__file__).resolve().parents[3]
+SAMPLE_DIRS = [ROOT_DIR, ROOT_DIR / "tests" / "data" / "pptx_samples"]
+
+
+def _sample_dir(sample_name: str) -> Path:
+    for samples_dir in SAMPLE_DIRS:
+        candidate = samples_dir / sample_name
+
+        if candidate.is_dir():
+            return candidate
+
+    raise FileNotFoundError(f"Sample not found: {sample_name}")
 
 
 def _fixture_pptx_path(tmp_path: Path, sample_name: str) -> Path:
-    source_dir = SAMPLES_DIR / sample_name
+    source_dir = _sample_dir(sample_name)
     pptx_path = tmp_path / f"{sample_name}.pptx"
 
     with ZipFile(pptx_path, "w", ZIP_DEFLATED) as zip_file:
@@ -61,6 +76,40 @@ def _media_members(pptx_path: Path) -> set[str]:
     return {name for name in _zip_names(pptx_path) if name.startswith("ppt/media/")}
 
 
+def _audio_mode_for_spid(slide_root: ET.Element, spid: str) -> str:
+    if (
+        slide_root.find(
+            f".//p:cTn[@nodeType='interactiveSeq']//p:spTgt[@spid='{spid}']",
+            namespaces=NSMAP,
+        )
+        is not None
+    ):
+        return "interactive"
+
+    for par in slide_root.findall(
+        ".//p:cTn[@nodeType='mainSeq']/p:childTnLst/p:par",
+        namespaces=NSMAP,
+    ):
+        if par.find(f".//p:spTgt[@spid='{spid}']", namespaces=NSMAP) is None:
+            continue
+
+        st_cond_lst = par.find("p:cTn/p:stCondLst", namespaces=NSMAP)
+
+        if (
+            st_cond_lst is not None
+            and st_cond_lst.find(
+                "p:cond[@evt='onBegin'][@delay='0']",
+                namespaces=NSMAP,
+            )
+            is not None
+        ):
+            return "auto"
+
+        return "click"
+
+    return "unknown"
+
+
 def _audio_entries(slide_root: ET.Element) -> list[dict[str, object]]:
     entries: list[dict[str, object]] = []
 
@@ -78,20 +127,15 @@ def _audio_entries(slide_root: ET.Element) -> list[dict[str, object]]:
         if spid is None:
             continue
 
+        mode = _audio_mode_for_spid(slide_root, spid)
+
         entries.append(
             {
                 "name": c_nv_pr.get("name", ""),
                 "spid": spid,
-                "interactive": slide_root.find(
-                    f".//p:cTn[@nodeType='interactiveSeq']//p:spTgt[@spid='{spid}']",
-                    namespaces=NSMAP,
-                )
-                is not None,
-                "mainseq": slide_root.find(
-                    f".//p:cTn[@nodeType='mainSeq']//p:spTgt[@spid='{spid}']",
-                    namespaces=NSMAP,
-                )
-                is not None,
+                "mode": mode,
+                "interactive": mode == "interactive",
+                "mainseq": mode in {"auto", "click"},
                 "audio_rid": audio_file.get(
                     "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}link"
                 ),
@@ -124,6 +168,23 @@ def _relationship_targets_by_type(rels_root: ET.Element) -> dict[str, list[str]]
     return targets
 
 
+def _relationship_targets_by_id(rels_root: ET.Element) -> dict[str, str]:
+    targets: dict[str, str] = {}
+
+    for relationship in rels_root.findall(
+        XPATH_RELATIONSHIP_WITH_ID, namespaces=NSMAP_RELS
+    ):
+        rel_id = relationship.get("Id")
+        target = relationship.get("Target")
+
+        if rel_id is None or target is None:
+            continue
+
+        targets[rel_id] = target
+
+    return targets
+
+
 def _has_content_type_default(content_types_root: ET.Element, extension: str) -> bool:
     return (
         content_types_root.find(
@@ -147,6 +208,89 @@ def _has_content_type_override(content_types_root: ET.Element, part_name: str) -
 def _audio_names(slides: list[dict[str, object]]) -> list[str]:
     audio_list = cast(list[dict[str, str]], slides[0]["audio"])
     return [audio["name"] for audio in audio_list]
+
+
+def _audio_signatures(slide_root: ET.Element) -> list[tuple[str, str]]:
+    return sorted(
+        (cast(str, entry["name"]), cast(str, entry["mode"]))
+        for entry in _audio_entries(slide_root)
+    )
+
+
+def _relationship_type_counts(rels_root: ET.Element) -> dict[str, int]:
+    return {
+        rel_type: len(targets)
+        for rel_type, targets in _relationship_targets_by_type(rels_root).items()
+    }
+
+
+def _media_extension_counts_from_zip(pptx_path: Path) -> dict[str, int]:
+    return dict(Counter(Path(name).suffix for name in _media_members(pptx_path)))
+
+
+def _media_extension_counts_from_sample(sample_name: str) -> dict[str, int]:
+    media_dir = _sample_dir(sample_name) / "ppt" / "media"
+
+    if not media_dir.exists():
+        return {}
+
+    return dict(
+        Counter(
+            file_path.suffix for file_path in media_dir.iterdir() if file_path.is_file()
+        )
+    )
+
+
+def _main_sequence_branch_counts(slide_root: ET.Element) -> dict[str, int]:
+    counts: Counter[str] = Counter()
+
+    for par in slide_root.findall(
+        ".//p:cTn[@nodeType='mainSeq']/p:childTnLst/p:par",
+        namespaces=NSMAP,
+    ):
+        st_cond_lst = par.find("p:cTn/p:stCondLst", namespaces=NSMAP)
+
+        if (
+            st_cond_lst is not None
+            and st_cond_lst.find(
+                "p:cond[@evt='onBegin'][@delay='0']",
+                namespaces=NSMAP,
+            )
+            is not None
+        ):
+            counts["auto"] += 1
+        else:
+            counts["click"] += 1
+
+    return {"auto": counts["auto"], "click": counts["click"]}
+
+
+def _slide_structure_summary(slide_root: ET.Element) -> dict[str, object]:
+    return {
+        "timing": slide_root.find(XPATH_P_TIMING, namespaces=NSMAP) is not None,
+        "audio_signatures": _audio_signatures(slide_root),
+        "audio_node_count": len(slide_root.findall(".//p:audio", namespaces=NSMAP)),
+        "branch_counts": _main_sequence_branch_counts(slide_root),
+        "interactive_seq_count": len(
+            slide_root.findall(".//p:cTn[@nodeType='interactiveSeq']", namespaces=NSMAP)
+        ),
+    }
+
+
+def _zip_member_bytes(pptx_path: Path, member: str) -> bytes:
+    with ZipFile(pptx_path) as zip_file:
+        return zip_file.read(member)
+
+
+def _audio_media_member_for_name(pptx_path: Path, audio_name: str) -> str:
+    slide_root = _read_zip_xml(pptx_path, "ppt/slides/slide1.xml")
+    slide_rels_root = _read_zip_xml(pptx_path, "ppt/slides/_rels/slide1.xml.rels")
+    targets_by_id = _relationship_targets_by_id(slide_rels_root)
+    audio_entry = next(
+        entry for entry in _audio_entries(slide_root) if entry["name"] == audio_name
+    )
+    media_target = targets_by_id[cast(str, audio_entry["media_rid"])]
+    return resolve_target_path("ppt/slides/slide1.xml", media_target)
 
 
 def test_set_slide_notes_creates_notes_parts_and_updates_metadata(
@@ -259,11 +403,11 @@ def test_delete_manual_from_two_manual_and_auto_audio_keeps_other_entries(
     output_path = tmp_path / "manual-removed.pptx"
 
     with PptxFile.open(input_path) as pptx:
-        pptx.delete_audio_for_slide(0, "file_example_MP3_700KB")
+        pptx.delete_audio_for_slide(0, "ppt_audio_2")
         assert _audio_names(pptx.get_slides()) == [
-            "power-narrator",
-            "file_example_MP3_2MG",
-            "file_example_MP3_1MG",
+            "ppt_audio_1",
+            "ppt_audio_3",
+            "ppt_audio_4",
         ]
         pptx.export_to(output_path)
 
@@ -273,33 +417,21 @@ def test_delete_manual_from_two_manual_and_auto_audio_keeps_other_entries(
     targets_by_type = _relationship_targets_by_type(slide_rels_root)
 
     assert [entry["name"] for entry in audio_entries] == [
-        "power-narrator",
-        "file_example_MP3_2MG",
-        "file_example_MP3_1MG",
+        "ppt_audio_1",
+        "ppt_audio_3",
+        "ppt_audio_4",
     ]
-    assert [
-        entry["name"] for entry in audio_entries if entry["interactive"] is True
-    ] == ["file_example_MP3_1MG"]
-    assert [entry["name"] for entry in audio_entries if entry["mainseq"] is True] == [
-        "power-narrator",
-        "file_example_MP3_2MG",
+    assert [entry["name"] for entry in audio_entries if entry["mode"] == "click"] == [
+        "ppt_audio_4"
     ]
-    assert set(targets_by_type[REL_TYPE_AUDIO]) == {
-        "../media/media1.mp3",
-        "../media/media2.mp3",
-        "../media/media3.mp3",
-    }
-    assert set(targets_by_type[REL_TYPE_MEDIA]) == {
-        "../media/media1.mp3",
-        "../media/media2.mp3",
-        "../media/media3.mp3",
-    }
-    assert _media_members(output_path) == {
-        "ppt/media/image1.png",
-        "ppt/media/media1.mp3",
-        "ppt/media/media2.mp3",
-        "ppt/media/media3.mp3",
-    }
+    assert [entry["name"] for entry in audio_entries if entry["mode"] == "auto"] == [
+        "ppt_audio_1",
+        "ppt_audio_3",
+    ]
+    assert len(targets_by_type[REL_TYPE_AUDIO]) == 3
+    assert len(targets_by_type[REL_TYPE_MEDIA]) == 3
+    assert len(targets_by_type[REL_TYPE_IMAGE]) == 1
+    assert _media_extension_counts_from_zip(output_path) == {".mp3": 3, ".png": 1}
 
 
 def test_delete_automatic_from_two_manual_and_auto_audio_keeps_other_entries(
@@ -309,11 +441,11 @@ def test_delete_automatic_from_two_manual_and_auto_audio_keeps_other_entries(
     output_path = tmp_path / "auto-removed.pptx"
 
     with PptxFile.open(input_path) as pptx:
-        pptx.delete_audio_for_slide(0, "power-narrator")
+        pptx.delete_audio_for_slide(0, "ppt_audio_1")
         assert _audio_names(pptx.get_slides()) == [
-            "file_example_MP3_700KB",
-            "file_example_MP3_2MG",
-            "file_example_MP3_1MG",
+            "ppt_audio_2",
+            "ppt_audio_3",
+            "ppt_audio_4",
         ]
         pptx.export_to(output_path)
 
@@ -323,32 +455,21 @@ def test_delete_automatic_from_two_manual_and_auto_audio_keeps_other_entries(
     targets_by_type = _relationship_targets_by_type(slide_rels_root)
 
     assert [entry["name"] for entry in audio_entries] == [
-        "file_example_MP3_700KB",
-        "file_example_MP3_2MG",
-        "file_example_MP3_1MG",
+        "ppt_audio_2",
+        "ppt_audio_3",
+        "ppt_audio_4",
     ]
-    assert [
-        entry["name"] for entry in audio_entries if entry["interactive"] is True
-    ] == ["file_example_MP3_700KB", "file_example_MP3_1MG"]
-    assert [entry["name"] for entry in audio_entries if entry["mainseq"] is True] == [
-        "file_example_MP3_2MG"
+    assert [entry["name"] for entry in audio_entries if entry["mode"] == "click"] == [
+        "ppt_audio_2",
+        "ppt_audio_4",
     ]
-    assert set(targets_by_type[REL_TYPE_AUDIO]) == {
-        "../media/media1.mp3",
-        "../media/media2.mp3",
-        "../media/media3.mp3",
-    }
-    assert set(targets_by_type[REL_TYPE_MEDIA]) == {
-        "../media/media1.mp3",
-        "../media/media2.mp3",
-        "../media/media3.mp3",
-    }
-    assert _media_members(output_path) == {
-        "ppt/media/image1.png",
-        "ppt/media/media1.mp3",
-        "ppt/media/media2.mp3",
-        "ppt/media/media3.mp3",
-    }
+    assert [entry["name"] for entry in audio_entries if entry["mode"] == "auto"] == [
+        "ppt_audio_3",
+    ]
+    assert len(targets_by_type[REL_TYPE_AUDIO]) == 3
+    assert len(targets_by_type[REL_TYPE_MEDIA]) == 3
+    assert len(targets_by_type[REL_TYPE_IMAGE]) == 1
+    assert _media_extension_counts_from_zip(output_path) == {".mp3": 3, ".png": 1}
 
 
 def test_delete_manual_from_one_manual_and_auto_audio_keeps_automatic(
@@ -358,8 +479,8 @@ def test_delete_manual_from_one_manual_and_auto_audio_keeps_automatic(
     output_path = tmp_path / "manual-removed-from-pair.pptx"
 
     with PptxFile.open(input_path) as pptx:
-        pptx.delete_audio_for_slide(0, "file_example_MP3_700KB")
-        assert _audio_names(pptx.get_slides()) == ["power-narrator"]
+        pptx.delete_audio_for_slide(0, "ppt_audio_2")
+        assert _audio_names(pptx.get_slides()) == ["ppt_audio_1"]
         pptx.export_to(output_path)
 
     slide_root = _read_zip_xml(output_path, "ppt/slides/slide1.xml")
@@ -367,14 +488,13 @@ def test_delete_manual_from_one_manual_and_auto_audio_keeps_automatic(
     audio_entries = _audio_entries(slide_root)
     targets_by_type = _relationship_targets_by_type(slide_rels_root)
 
-    assert [entry["name"] for entry in audio_entries] == ["power-narrator"]
-    assert audio_entries[0]["interactive"] is False
-    assert audio_entries[0]["mainseq"] is True
-    assert targets_by_type[REL_TYPE_AUDIO] == ["../media/media1.mp3"]
-    assert targets_by_type[REL_TYPE_MEDIA] == ["../media/media1.mp3"]
+    assert _audio_signatures(slide_root) == [("ppt_audio_1", "auto")]
+    assert len(targets_by_type[REL_TYPE_AUDIO]) == 1
+    assert len(targets_by_type[REL_TYPE_MEDIA]) == 1
+    assert len(targets_by_type[REL_TYPE_IMAGE]) == 1
     assert _media_members(output_path) == {
         "ppt/media/image1.png",
-        "ppt/media/media1.mp3",
+        next(iter(set(targets_by_type[REL_TYPE_MEDIA]))).replace("..", "ppt"),
     }
 
 
@@ -385,8 +505,8 @@ def test_delete_automatic_from_one_manual_and_auto_audio_keeps_manual(
     output_path = tmp_path / "auto-removed-from-pair.pptx"
 
     with PptxFile.open(input_path) as pptx:
-        pptx.delete_audio_for_slide(0, "power-narrator")
-        assert _audio_names(pptx.get_slides()) == ["file_example_MP3_700KB"]
+        pptx.delete_audio_for_slide(0, "ppt_audio_1")
+        assert _audio_names(pptx.get_slides()) == ["ppt_audio_2"]
         pptx.export_to(output_path)
 
     slide_root = _read_zip_xml(output_path, "ppt/slides/slide1.xml")
@@ -394,14 +514,13 @@ def test_delete_automatic_from_one_manual_and_auto_audio_keeps_manual(
     audio_entries = _audio_entries(slide_root)
     targets_by_type = _relationship_targets_by_type(slide_rels_root)
 
-    assert [entry["name"] for entry in audio_entries] == ["file_example_MP3_700KB"]
-    assert audio_entries[0]["interactive"] is True
-    assert audio_entries[0]["mainseq"] is False
-    assert targets_by_type[REL_TYPE_AUDIO] == ["../media/media1.mp3"]
-    assert targets_by_type[REL_TYPE_MEDIA] == ["../media/media1.mp3"]
+    assert _audio_signatures(slide_root) == [("ppt_audio_2", "click")]
+    assert len(targets_by_type[REL_TYPE_AUDIO]) == 1
+    assert len(targets_by_type[REL_TYPE_MEDIA]) == 1
+    assert len(targets_by_type[REL_TYPE_IMAGE]) == 1
     assert _media_members(output_path) == {
         "ppt/media/image1.png",
-        "ppt/media/media1.mp3",
+        next(iter(set(targets_by_type[REL_TYPE_MEDIA]))).replace("..", "ppt"),
     }
 
 
@@ -412,7 +531,7 @@ def test_delete_last_automatic_audio_removes_all_audio_artifacts(
     output_path = tmp_path / "all-auto-removed.pptx"
 
     with PptxFile.open(input_path) as pptx:
-        pptx.delete_audio_for_slide(0, "power-narrator")
+        pptx.delete_audio_for_slide(0, "ppt_audio_1")
         assert _audio_names(pptx.get_slides()) == []
         pptx.export_to(output_path)
 
@@ -429,3 +548,232 @@ def test_delete_last_automatic_audio_removes_all_audio_artifacts(
     assert not _has_content_type_default(content_types_root, "mp3")
     assert not _has_content_type_default(content_types_root, "png")
     assert _media_members(output_path) == set()
+
+
+def test_open_mixed_timing_sample_reads_all_audio_entries(tmp_path: Path) -> None:
+    input_path = _fixture_pptx_path(tmp_path, "1-auto-click-interactive-audio")
+    slide_root = _read_zip_xml(input_path, "ppt/slides/slide1.xml")
+
+    with PptxFile.open(input_path) as pptx:
+        assert _audio_names(pptx.get_slides()) == [
+            "ppt_audio_1",
+            "ppt_audio_3",
+            "ppt_audio_5",
+        ]
+
+    assert _audio_signatures(slide_root) == [
+        ("ppt_audio_1", "auto"),
+        ("ppt_audio_3", "click"),
+        ("ppt_audio_5", "interactive"),
+    ]
+
+
+def test_open_double_mixed_timing_sample_reads_all_audio_entries(
+    tmp_path: Path,
+) -> None:
+    input_path = _fixture_pptx_path(tmp_path, "2-auto-click-interactive-audio")
+    slide_root = _read_zip_xml(input_path, "ppt/slides/slide1.xml")
+
+    with PptxFile.open(input_path) as pptx:
+        assert _audio_names(pptx.get_slides()) == [
+            "ppt_audio_1",
+            "ppt_audio_2",
+            "ppt_audio_3",
+            "ppt_audio_4",
+            "ppt_audio_5",
+            "ppt_audio_6",
+        ]
+
+    assert Counter(mode for _, mode in _audio_signatures(slide_root)) == Counter(
+        {"auto": 2, "click": 2, "interactive": 2}
+    )
+
+
+def test_save_audio_for_slide_adds_default_auto_to_mixed_timing_slide(
+    tmp_path: Path,
+) -> None:
+    input_path = _fixture_pptx_path(tmp_path, "1-auto-click-interactive-audio")
+    output_path = tmp_path / "mixed-plus-auto.pptx"
+    mp3_path = _write_mp3(tmp_path, "narration.mp3", b"new-auto")
+    input_slide_rels_root = _read_zip_xml(
+        input_path, "ppt/slides/_rels/slide1.xml.rels"
+    )
+    input_type_counts = _relationship_type_counts(input_slide_rels_root)
+    input_media_counts = _media_extension_counts_from_zip(input_path)
+
+    with PptxFile.open(input_path) as pptx:
+        pptx.save_audio_for_slide(0, mp3_path)
+        assert _audio_names(pptx.get_slides()) == [
+            "ppt_audio_1",
+            "ppt_audio_3",
+            "ppt_audio_5",
+            "narration",
+        ]
+        pptx.export_to(output_path)
+
+    slide_root = _read_zip_xml(output_path, "ppt/slides/slide1.xml")
+    slide_rels_root = _read_zip_xml(output_path, "ppt/slides/_rels/slide1.xml.rels")
+
+    assert Counter(mode for _, mode in _audio_signatures(slide_root)) == Counter(
+        {"auto": 2, "click": 1, "interactive": 1}
+    )
+    assert _relationship_type_counts(slide_rels_root)[REL_TYPE_AUDIO] == 4
+    assert _relationship_type_counts(slide_rels_root)[REL_TYPE_MEDIA] == 4
+    assert _relationship_type_counts(slide_rels_root)[REL_TYPE_IMAGE] in {
+        input_type_counts[REL_TYPE_IMAGE],
+        input_type_counts[REL_TYPE_IMAGE] + 1,
+    }
+    assert _media_extension_counts_from_zip(output_path)[".mp3"] == (
+        input_media_counts[".mp3"] + 1
+    )
+
+
+@pytest.mark.parametrize(
+    ("audio_name", "expected_mode"),
+    [
+        ("ppt_audio_1", "auto"),
+        ("ppt_audio_3", "click"),
+        ("ppt_audio_5", "interactive"),
+    ],
+)
+def test_save_audio_for_slide_updates_existing_audio_without_changing_structure(
+    tmp_path: Path,
+    audio_name: str,
+    expected_mode: str,
+) -> None:
+    input_path = _fixture_pptx_path(tmp_path, "1-auto-click-interactive-audio")
+    output_path = tmp_path / f"updated-{audio_name}.pptx"
+    payload = f"updated-{audio_name}".encode()
+    mp3_path = _write_mp3(tmp_path, f"{audio_name}.mp3", payload)
+
+    with PptxFile.open(input_path) as pptx:
+        pptx.save_audio_for_slide(0, mp3_path)
+        assert _audio_names(pptx.get_slides()) == [
+            "ppt_audio_1",
+            "ppt_audio_3",
+            "ppt_audio_5",
+        ]
+        pptx.export_to(output_path)
+
+    slide_root = _read_zip_xml(output_path, "ppt/slides/slide1.xml")
+    slide_rels_root = _read_zip_xml(output_path, "ppt/slides/_rels/slide1.xml.rels")
+    media_member = _audio_media_member_for_name(output_path, audio_name)
+
+    assert (audio_name, expected_mode) in _audio_signatures(slide_root)
+    assert Counter(mode for _, mode in _audio_signatures(slide_root)) == Counter(
+        {"auto": 1, "click": 1, "interactive": 1}
+    )
+    assert _relationship_type_counts(slide_rels_root)[REL_TYPE_AUDIO] == 3
+    assert _relationship_type_counts(slide_rels_root)[REL_TYPE_MEDIA] == 3
+    assert _relationship_type_counts(slide_rels_root)[REL_TYPE_IMAGE] == 1
+    assert _zip_member_bytes(output_path, media_member) == payload
+
+
+@pytest.mark.parametrize(
+    ("audio_name", "expected_signatures"),
+    [
+        (
+            "ppt_audio_1",
+            [
+                ("ppt_audio_2", "auto"),
+                ("ppt_audio_3", "click"),
+                ("ppt_audio_4", "click"),
+                ("ppt_audio_5", "interactive"),
+                ("ppt_audio_6", "interactive"),
+            ],
+        ),
+        (
+            "ppt_audio_3",
+            [
+                ("ppt_audio_1", "auto"),
+                ("ppt_audio_2", "auto"),
+                ("ppt_audio_4", "click"),
+                ("ppt_audio_5", "interactive"),
+                ("ppt_audio_6", "interactive"),
+            ],
+        ),
+        (
+            "ppt_audio_5",
+            [
+                ("ppt_audio_1", "auto"),
+                ("ppt_audio_2", "auto"),
+                ("ppt_audio_3", "click"),
+                ("ppt_audio_4", "click"),
+                ("ppt_audio_6", "interactive"),
+            ],
+        ),
+    ],
+)
+def test_delete_audio_for_slide_keeps_other_entries_in_double_mixed_sample(
+    tmp_path: Path,
+    audio_name: str,
+    expected_signatures: list[tuple[str, str]],
+) -> None:
+    input_path = _fixture_pptx_path(tmp_path, "2-auto-click-interactive-audio")
+    output_path = tmp_path / f"deleted-{audio_name}.pptx"
+
+    with PptxFile.open(input_path) as pptx:
+        pptx.delete_audio_for_slide(0, audio_name)
+        assert _audio_names(pptx.get_slides()) == [
+            name for name, _ in expected_signatures
+        ]
+        pptx.export_to(output_path)
+
+    slide_root = _read_zip_xml(output_path, "ppt/slides/slide1.xml")
+    slide_rels_root = _read_zip_xml(output_path, "ppt/slides/_rels/slide1.xml.rels")
+
+    assert _audio_signatures(slide_root) == expected_signatures
+    assert _relationship_type_counts(slide_rels_root)[REL_TYPE_AUDIO] == 5
+    assert _relationship_type_counts(slide_rels_root)[REL_TYPE_MEDIA] == 5
+    assert _relationship_type_counts(slide_rels_root)[REL_TYPE_IMAGE] == 1
+    assert _media_extension_counts_from_zip(output_path) == {".mp3": 5, ".png": 1}
+
+
+@pytest.mark.parametrize(
+    ("audio_name", "expected_sample"),
+    [
+        ("ppt_audio_1", "no-auto-audio"),
+        ("ppt_audio_3", "no-click-audio"),
+        ("ppt_audio_5", "no-interactive-audio"),
+    ],
+)
+def test_delete_audio_for_slide_cleans_up_timing_groups_for_single_mixed_sample(
+    tmp_path: Path,
+    audio_name: str,
+    expected_sample: str,
+) -> None:
+    input_path = _fixture_pptx_path(tmp_path, "1-auto-click-interactive-audio")
+    output_path = tmp_path / f"{expected_sample}.pptx"
+
+    with PptxFile.open(input_path) as pptx:
+        pptx.delete_audio_for_slide(0, audio_name)
+        pptx.export_to(output_path)
+
+    slide_root = _read_zip_xml(output_path, "ppt/slides/slide1.xml")
+    slide_rels_root = _read_zip_xml(output_path, "ppt/slides/_rels/slide1.xml.rels")
+    content_types_root = _read_zip_xml(output_path, "[Content_Types].xml")
+    expected_slide_root = ET.fromstring(
+        (_sample_dir(expected_sample) / "ppt/slides/slide1.xml").read_bytes()
+    )
+    expected_rels_root = ET.fromstring(
+        (_sample_dir(expected_sample) / "ppt/slides/_rels/slide1.xml.rels").read_bytes()
+    )
+    expected_content_types_root = ET.fromstring(
+        (_sample_dir(expected_sample) / "[Content_Types].xml").read_bytes()
+    )
+
+    assert _slide_structure_summary(slide_root) == _slide_structure_summary(
+        expected_slide_root
+    )
+    assert _relationship_type_counts(slide_rels_root) == _relationship_type_counts(
+        expected_rels_root
+    )
+    assert _media_extension_counts_from_zip(
+        output_path
+    ) == _media_extension_counts_from_sample(expected_sample)
+    assert _has_content_type_default(
+        content_types_root, "mp3"
+    ) == _has_content_type_default(expected_content_types_root, "mp3")
+    assert _has_content_type_default(
+        content_types_root, "png"
+    ) == _has_content_type_default(expected_content_types_root, "png")
